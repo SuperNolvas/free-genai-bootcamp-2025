@@ -13,3 +13,10 @@ The GenAI server must have enough bandwidth to serve the 300 students
 ## Data Strategy
 
 There is a concern regarding copyrighted materials, so we need to purchase and supply materials  and store them in our database
+
+## Considerations
+
+We are considering using IBM Granite because it is a truly open-source model with training data that is traceable so we can avoid copyright issues
+
+https://huggingface.co/ibm-granite
+
