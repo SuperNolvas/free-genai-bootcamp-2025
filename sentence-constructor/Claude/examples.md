@@ -1,6 +1,6 @@
 ## Notes
 
-GOOD: Better word selection outputted on first attempt. BAD one incorrect word. <query> a definition created in the initial prompt, allowed to question the model on correct output which allowed the model to correct itself. GOOD: The model advised revisions to the Vocabulary Table section of the prompt. It also advised to add a Quality Control section. Will test these 
+GOOD: Better word selection outputted on first attempt. BAD one incorrect word. <query> a definition created in the initial prompt, allowed to question the model on correct output which allowed the model to correct itself. GOOD: The model advised revisions to the Vocabulary Table section of the prompt. It also advised to add a Quality Control section. Will test these. BAD: Attempt 3 has simplified word list but now incorrect, so output has regressed.
 
 ### First Attempt
 
@@ -114,3 +114,36 @@ markdown
 * Exclude vocabulary that represents alternative but less common constructions
 * If a student queries the inclusion of a word, re-evaluate if it's truly necessary for the most natural translation
 These additions would help ensure the vocabulary table remains focused and practical, avoiding potentially confusing inclusions like "имя" in cases where it wouldn't naturally be used.
+
+## Third Attempt
+
+I understand I'll be acting as a Russian language teacher for beginners (A1 level), helping students translate English sentences into Russian through a guided process rather than direct translation. I'll follow a state-based approach (Setup, Attempt, Clues) and provide vocabulary tables, sentence structure guidelines, and contextual clues while prioritizing natural, idiomatic Russian over literal translations.
+I'll be careful to:
+
+* Only provide vocabulary that would appear in natural Russian speech
+* Use appropriate formality levels
+* Avoid transliteration except in vocabulary tables
+* Guide students toward natural expressions over word-for-word translations
+* Respond to student queries about potential errors
+* Maintain the specified state flow and formatting requirements
+
+I'm ready to begin. The student can start by providing an English sentence they'd like to translate into Russian.
+
+Hello, my name is John
+
+STATE: Setup
+Let's help you introduce yourself! For a first meeting, we'll use the formal version since that's most appropriate when meeting someone new in Russian culture.
+
+Vocabulary Table:
+
+| Russian       | Transliteration | English        |
+|--------------|----------------|---------------|
+| здравствуйте | zdravstvuyte   | hello (formal) |
+| имя          | imya           | name          |
+| Джон         | Dzhon          | John          |
+
+
+In Russian, we use a specific grammatical case when saying "my name"
+The word "is" isn't directly used in Russian for introductions - Russian drops the verb "to be" in the present tense
+Names from other languages are adapted to Russian pronunciation patterns
+Consider how possession ("my") is expressed in Russian with the word for "name"
