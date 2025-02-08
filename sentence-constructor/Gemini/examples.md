@@ -1,6 +1,6 @@
 ## Notes
 
-BAD: Output similar to Perplexity. But the LLM gave a clue that it was using literal translation. GOOD: The model is taking into consideration formal and informal language. I have revised the prompt which will be used in the second attempt to attempt to stop literal translation. GOOD I used <query> to ask the model to revise the prompt, and it did this. I will use the revised prompt in attempt 3. 
+BAD: Output similar to Perplexity. But the LLM gave a clue that it was using literal translation. GOOD: The model is taking into consideration formal and informal language. I have revised the prompt which will be used in the second attempt to attempt to stop literal translation. GOOD I used <query> to ask the model to revise the prompt, and it did this. I will use the revised prompt in attempt 3. BAD: Updated prompt giving sentence structure clues, word list still incorrect.
 
 ## First Attempt
 
@@ -157,3 +157,24 @@ Example:
 
 ## Attempt 3
 
+Okay, let's work on transcribing "Hello, my name is John" into Russian.  This is a common greeting, so it's a great place to start.  Russian greetings can vary in formality.  We'll focus on a friendly, informal version for now.
+
+Here's your vocabulary table:
+
+Russian	Transliteration	English
+привет	privet	hello
+мой	moy	my
+имя	imya	name
+звать	zvat'	to call
+
+
+Sentence Structure Guideline:
+
+Привет, ... меня ... Джон. (Privet, ... menya ... Dzhon.)
+Consider word order flexibility in Russian.
+Clues, Considerations, and Next Steps:
+
+"Hello" can be translated in a few ways, but привет is common for informal situations.
+Think about how "my name is" might be expressed using the provided words. There isn't a direct equivalent to "is" in this context. Russian often uses a different structure.
+"John" is a name. How might you adapt it to Russian? Often, names are transliterated, but sometimes there are established Russian versions.
+Now, give it a try.  What do you think the Russian sentence might be?
