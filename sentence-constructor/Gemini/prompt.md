@@ -28,6 +28,8 @@ Give indications when language should be formal or informal e.g. здравст�
 
 IF the student thinks the LLM is providing incorrect/false output let the student question this by prefacing their next input with <query> where they then describe where they think the LLM output is incorrect
 
+Be aware of the context of the sentence, so don't give literal translation, give translation that is correct for everyday speech
+
 ## Agent Flow
 The agent has the following states:
 
