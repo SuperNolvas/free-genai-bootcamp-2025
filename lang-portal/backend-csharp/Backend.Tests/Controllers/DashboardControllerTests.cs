@@ -1,25 +1,27 @@
 using System.Net;
 using System.Net.Http.Json;
 using Xunit;
-using Backend.Tests.Helpers;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Backend.Tests.Controllers;
 
-public class DashboardControllerTests : IClassFixture<TestWebApplicationFactory>
+public class DashboardControllerTests : IClassFixture<WebApplicationFactory<Program>>
 {
-    private readonly HttpClient _client;
+    private readonly WebApplicationFactory<Program> _factory;
 
-    public DashboardControllerTests(TestWebApplicationFactory factory)
+    public DashboardControllerTests(WebApplicationFactory<Program> factory)
     {
-        _client = factory.CreateClient();
+        _factory = factory;
     }
 
     [Fact]
     public async Task GetLastStudySession_ReturnsSuccessStatusCode()
     {
+        // Arrange
+        var client = _factory.CreateClient();
+
         // Act
-        var response = await _client.GetAsync("/api/dashboard/last_study_session");
+        var response = await client.GetAsync("/api/dashboard/last_study_session");
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -28,8 +30,11 @@ public class DashboardControllerTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task GetStudyProgress_ReturnsProgressData()
     {
+        // Arrange
+        var client = _factory.CreateClient();
+
         // Act
-        var response = await _client.GetAsync("/api/dashboard/study_progress");
+        var response = await client.GetAsync("/api/dashboard/study_progress");
         var content = await response.Content.ReadFromJsonAsync<dynamic>();
 
         // Assert
@@ -42,7 +47,7 @@ public class DashboardControllerTests : IClassFixture<TestWebApplicationFactory>
     public async Task GetQuickStats_ReturnsStats()
     {
         // Act
-        var response = await _client.GetAsync("/api/dashboard/quick-stats");
+        var response = await _factory.CreateClient().GetAsync("/api/dashboard/quick-stats");
         var content = await response.Content.ReadFromJsonAsync<dynamic>();
 
         // Assert
