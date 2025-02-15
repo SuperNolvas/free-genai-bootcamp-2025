@@ -451,6 +451,5 @@ In our task, we should have DSL to specify each seed file and its expected group
     "transliteration": "platit",
     "english": "to pay"
   },
-  ...
 ]
 ```
