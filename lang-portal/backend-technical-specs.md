@@ -15,8 +15,8 @@ A language learning school wants to build a prototype of a learning portal which
 *   There will be **no authentication or authorization**
 *   Everything will be treated as a **single user**
 
-## Directory Structure`
-
+## Directory Structure
+```tree
 backend_cs/
 ├── Controllers/      # ASP.NET Core Web API Controllers
 ├── Models/           # Data models and entities
@@ -29,7 +29,7 @@ backend_cs/
 ├── appsettings.json   # Application configuration
 ├── Program.cs         # Application entry point
 ├── Backend.csproj     # C# project file
-
+```
 `## Database Schema
 
 Our database will be a single SQLite database called `words.db` that will be in the `db` folder of the `backend_cs` directory.
