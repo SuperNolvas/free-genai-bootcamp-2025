@@ -44,6 +44,10 @@ builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<IStudySessionService, StudySessionService>();
 builder.Services.AddScoped<IStudyActivityService, StudyActivityService>();
 
+// Add health checks
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database_health_check");
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -57,6 +61,9 @@ app.UseHttpsRedirection();
 app.UseCors();
 app.UseAuthorization();
 app.MapControllers();
+
+// Map health checks endpoint
+app.MapHealthChecks("/health");
 
 // Ensure the database directory exists
 Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), "db"));
