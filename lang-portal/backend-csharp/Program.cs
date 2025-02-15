@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Backend.Data;
 using Backend.Services;
+using Backend.Services.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,9 +30,19 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Register repositories
+builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+builder.Services.AddScoped<IWordRepository, WordRepository>();
+builder.Services.AddScoped<IGroupRepository, GroupRepository>();
+builder.Services.AddScoped<IStudySessionRepository, StudySessionRepository>();
+builder.Services.AddScoped<IWordReviewRepository, WordReviewRepository>();
+builder.Services.AddScoped<IStudyActivityRepository, StudyActivityRepository>();
+
 // Register services
-builder.Services.AddScoped<DataSeeder>();
-builder.Services.AddScoped<DatabaseManager>();
+builder.Services.AddScoped<IWordService, WordService>();
+builder.Services.AddScoped<IGroupService, GroupService>();
+builder.Services.AddScoped<IStudySessionService, StudySessionService>();
+builder.Services.AddScoped<IStudyActivityService, StudyActivityService>();
 
 var app = builder.Build();
 
