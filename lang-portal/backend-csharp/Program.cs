@@ -1,6 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using Backend.Data;
+using Backend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add DbContext
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Add services to the container.
 builder.Services.AddControllers()
@@ -23,6 +29,10 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Register services
+builder.Services.AddScoped<DataSeeder>();
+builder.Services.AddScoped<DatabaseManager>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -39,5 +49,18 @@ app.MapControllers();
 
 // Ensure the database directory exists
 Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), "db"));
+
+// Initialize database after app is built
+using (var scope = app.Services.CreateScope())
+{
+    var dbManager = scope.ServiceProvider.GetRequiredService<DatabaseManager>();
+    await dbManager.InitializeDatabaseAsync();
+    await dbManager.MigrateDatabaseAsync();
+    
+    if (app.Environment.IsDevelopment())
+    {
+        await dbManager.SeedDatabaseAsync();
+    }
+}
 
 app.Run(); 

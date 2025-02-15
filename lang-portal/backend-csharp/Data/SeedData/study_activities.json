@@ -1,0 +1,12 @@
+[
+  {
+    "name": "Vocabulary Quiz",
+    "thumbnail_url": "https://example.com/vocab-quiz.jpg",
+    "description": "Practice your vocabulary with flashcards"
+  },
+  {
+    "name": "Writing Practice",
+    "thumbnail_url": "https://example.com/writing.jpg",
+    "description": "Practice writing Russian words"
+  }
+] 

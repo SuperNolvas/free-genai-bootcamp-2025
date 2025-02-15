@@ -1,0 +1,20 @@
+[
+  {
+    "russian": "здравствуйте",
+    "transliteration": "zdravstvuyte",
+    "english": "hello",
+    "parts": {
+      "type": "greeting",
+      "formality": "formal"
+    }
+  },
+  {
+    "russian": "спасибо",
+    "transliteration": "spasibo",
+    "english": "thank you",
+    "parts": {
+      "type": "gratitude",
+      "formality": "neutral"
+    }
+  }
+] 
