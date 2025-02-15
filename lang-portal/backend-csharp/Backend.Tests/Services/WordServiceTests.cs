@@ -1,8 +1,8 @@
 using Xunit;
 using Moq;
+using Backend.Models;
 using Backend.Services;
 using Backend.Services.Repositories;
-using Backend.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Backend.Tests.Services;
@@ -25,7 +25,7 @@ public class WordServiceTests
     {
         // Arrange
         var wordId = 1;
-        var word = new Word { WordsId = wordId, Russian = "привет", English = "hello" };
+        var word = new Word { WordsId = wordId, Russian = "привет", English = "hello", Transliteration = "privet" };
         _mockWordRepo.Setup(repo => repo.GetByIdAsync(wordId))
             .ReturnsAsync(word);
 
@@ -58,7 +58,11 @@ public class WordServiceTests
     public async Task AddWordAsync_ValidWord_ReturnsAddedWord()
     {
         // Arrange
-        var word = new Word { Russian = "спасибо", English = "thank you" };
+        var word = new Word { 
+            Russian = "спасибо", 
+            English = "thank you", 
+            Transliteration = "spasibo" 
+        };
         _mockWordRepo.Setup(repo => repo.AddAsync(It.IsAny<Word>()))
             .ReturnsAsync((Word w) => { w.WordsId = 1; return w; });
 
@@ -70,6 +74,7 @@ public class WordServiceTests
         Assert.Equal(1, result.WordsId);
         Assert.Equal("спасибо", result.Russian);
         Assert.Equal("thank you", result.English);
+        Assert.Equal("spasibo", result.Transliteration);
     }
 
     [Fact]
@@ -77,7 +82,12 @@ public class WordServiceTests
     {
         // Arrange
         var wordId = 1;
-        var word = new Word { WordsId = wordId };
+        var word = new Word { 
+            WordsId = wordId,
+            Russian = "тест",
+            English = "test",
+            Transliteration = "test"
+        };
         _mockWordRepo.Setup(repo => repo.GetByIdAsync(wordId))
             .ReturnsAsync(word);
 

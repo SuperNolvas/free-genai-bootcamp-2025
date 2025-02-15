@@ -9,7 +9,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.ConfigureServices(services =>
+        builder.ConfigureServices(async services =>
         {
             // Remove the app's AppDbContext registration
             var descriptor = services.SingleOrDefault(
@@ -34,8 +34,9 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             var scopedServices = scope.ServiceProvider;
             var db = scopedServices.GetRequiredService<AppDbContext>();
 
-            // Ensure the database is created
-            db.Database.EnsureCreated();
+            // Reset and seed the database
+            await TestDatabaseHelper.ResetDatabase(db);
+            await TestDatabaseHelper.SeedBasicTestData(db);
         });
     }
 } 

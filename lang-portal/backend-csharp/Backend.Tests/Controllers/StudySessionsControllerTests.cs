@@ -49,12 +49,11 @@ public class StudySessionsControllerTests : IClassFixture<TestWebApplicationFact
             Transliteration = "vremya"
         };
         var createWordResponse = await _client.PostAsJsonAsync("/api/words", word);
-        var wordLocation = createWordResponse.Headers.Location;
-        var wordId = int.Parse(wordLocation.ToString().Split('/').Last());
+        var wordId = createWordResponse.GetResourceIdFromLocation();
 
         var group = new Group { Name = "Time Words" };
         var createGroupResponse = await _client.PostAsJsonAsync("/api/groups", group);
-        var groupId = int.Parse(createGroupResponse.Headers.Location.ToString().Split('/').Last());
+        var groupId = createGroupResponse.GetResourceIdFromLocation();
 
         var activity = new StudyActivity { GroupId = groupId };
         var createActivityResponse = await _client.PostAsJsonAsync("/api/study_activities", activity);

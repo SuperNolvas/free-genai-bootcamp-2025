@@ -69,10 +69,10 @@ public class WordsControllerTests : IClassFixture<TestWebApplicationFactory>
             Transliteration = "dom"
         };
         var createResponse = await _client.PostAsJsonAsync("/api/words", word);
-        var location = createResponse.Headers.Location;
+        var wordId = createResponse.GetResourceIdFromLocation();
 
         // Act
-        var response = await _client.GetAsync(location);
+        var response = await _client.GetAsync($"/api/words/{wordId}");
         var content = await response.Content.ReadFromJsonAsync<dynamic>();
 
         // Assert

@@ -49,13 +49,11 @@ public class GroupsControllerTests : IClassFixture<TestWebApplicationFactory>
             Transliteration = "mir"
         };
         var createWordResponse = await _client.PostAsJsonAsync("/api/words", word);
-        var wordLocation = createWordResponse.Headers.Location;
-        var wordId = int.Parse(wordLocation.ToString().Split('/').Last());
+        var wordId = createWordResponse.GetResourceIdFromLocation();
 
         var group = new Group { Name = "Basic Words" };
         var createGroupResponse = await _client.PostAsJsonAsync("/api/groups", group);
-        var groupLocation = createGroupResponse.Headers.Location;
-        var groupId = int.Parse(groupLocation.ToString().Split('/').Last());
+        var groupId = createGroupResponse.GetResourceIdFromLocation();
 
         // Act
         var response = await _client.GetAsync($"/api/groups/{groupId}/words");
@@ -72,8 +70,7 @@ public class GroupsControllerTests : IClassFixture<TestWebApplicationFactory>
         // Arrange
         var group = new Group { Name = "Study Group" };
         var createResponse = await _client.PostAsJsonAsync("/api/groups", group);
-        var location = createResponse.Headers.Location;
-        var groupId = int.Parse(location.ToString().Split('/').Last());
+        var groupId = createResponse.GetResourceIdFromLocation();
 
         // Act
         var response = await _client.GetAsync($"/api/groups/{groupId}/study_sessions");

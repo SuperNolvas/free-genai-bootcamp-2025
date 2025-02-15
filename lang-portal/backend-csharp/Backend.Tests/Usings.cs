@@ -1,0 +1,12 @@
+global using Xunit;
+global using Moq;
+global using Microsoft.AspNetCore.Mvc.Testing;
+global using System.Net;
+global using System.Net.Http.Json;
+global using Microsoft.EntityFrameworkCore;
+global using Microsoft.Extensions.DependencyInjection;
+global using Backend.Data;
+global using Backend.Models;
+global using Backend.Services;
+global using Backend.Services.Repositories;
+global using Microsoft.Extensions.Logging; 

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Backend.Data;
 using Backend.Services;
 using Backend.Services.Repositories;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,7 +14,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.SnakeCaseNaming;
+        options.JsonSerializerOptions.PropertyNamingPolicy = new SnakeCaseNamingPolicy();
     });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -43,6 +44,9 @@ builder.Services.AddScoped<IWordService, WordService>();
 builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<IStudySessionService, StudySessionService>();
 builder.Services.AddScoped<IStudyActivityService, StudyActivityService>();
+builder.Services.AddScoped<DatabaseHealthCheck>();
+builder.Services.AddScoped<DataSeeder>();
+builder.Services.AddScoped<DatabaseManager>();
 
 // Add health checks
 builder.Services.AddHealthChecks()
@@ -81,4 +85,6 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-app.Run(); 
+app.Run();
+
+public partial class Program { } 

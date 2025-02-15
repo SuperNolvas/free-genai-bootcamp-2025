@@ -21,11 +21,11 @@ public class StudyActivitiesControllerTests : IClassFixture<TestWebApplicationFa
         // Arrange
         var group = new Group { Name = "Activity Group" };
         var createGroupResponse = await _client.PostAsJsonAsync("/api/groups", group);
-        var groupId = int.Parse(createGroupResponse.Headers.Location.ToString().Split('/').Last());
+        var groupId = createGroupResponse.GetResourceIdFromLocation();
 
         var activity = new StudyActivity { GroupId = groupId };
         var createResponse = await _client.PostAsJsonAsync("/api/study_activities", activity);
-        var activityId = int.Parse(createResponse.Headers.Location.ToString().Split('/').Last());
+        var activityId = createResponse.GetResourceIdFromLocation();
 
         // Act
         var response = await _client.GetAsync($"/api/study_activities/{activityId}");
@@ -40,11 +40,11 @@ public class StudyActivitiesControllerTests : IClassFixture<TestWebApplicationFa
         // Arrange
         var group = new Group { Name = "Activity Group" };
         var createGroupResponse = await _client.PostAsJsonAsync("/api/groups", group);
-        var groupId = int.Parse(createGroupResponse.Headers.Location.ToString().Split('/').Last());
+        var groupId = createGroupResponse.GetResourceIdFromLocation();
 
         var activity = new StudyActivity { GroupId = groupId };
         var createResponse = await _client.PostAsJsonAsync("/api/study_activities", activity);
-        var activityId = int.Parse(createResponse.Headers.Location.ToString().Split('/').Last());
+        var activityId = createResponse.GetResourceIdFromLocation();
 
         // Act
         var response = await _client.GetAsync($"/api/study_activities/{activityId}/study_sessions?page=1&pageSize=10");
@@ -62,7 +62,7 @@ public class StudyActivitiesControllerTests : IClassFixture<TestWebApplicationFa
         // Arrange
         var group = new Group { Name = "New Activity Group" };
         var createGroupResponse = await _client.PostAsJsonAsync("/api/groups", group);
-        var groupId = int.Parse(createGroupResponse.Headers.Location.ToString().Split('/').Last());
+        var groupId = createGroupResponse.GetResourceIdFromLocation();
 
         var activity = new StudyActivity { GroupId = groupId };
 

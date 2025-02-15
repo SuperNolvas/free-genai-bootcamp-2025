@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Backend.Data;
 using Microsoft.Extensions.Configuration;
+using Backend.Models;
 
 namespace Backend.Services;
 
@@ -89,13 +90,13 @@ public class DatabaseManager
             _logger.LogInformation("Resetting database...");
             
             // Delete all word reviews
-            await _context.WordReviewItems.ExecuteDeleteAsync();
+            await _context.WordReviewItems.Where(_ => true).ExecuteDeleteAsync();
             
             // Delete all study sessions
-            await _context.StudySessions.ExecuteDeleteAsync();
+            await _context.StudySessions.Where(_ => true).ExecuteDeleteAsync();
             
             // Delete all study activities
-            await _context.StudyActivities.ExecuteDeleteAsync();
+            await _context.StudyActivities.Where(_ => true).ExecuteDeleteAsync();
 
             await _context.SaveChangesAsync();
             _logger.LogInformation("Database reset successfully");
