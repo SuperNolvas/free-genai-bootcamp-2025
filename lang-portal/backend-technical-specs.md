@@ -86,56 +86,55 @@ Returns information about the most recent study session.
   "study_activity_id": 789,
   "group_id": 456,
   "group_name": "Basic Greetings"
-}`
-
+}
+```
 ### GET /api/dashboard/study_progress
 
 Returns study progress statistics. Please note that the frontend will determine the progress bar based on total words studied and total available words.
 
 **JSON Response**
+```JSON
 
-JSON
-
-`{
+{
   "total_words_studied": 3,
   "total_available_words": 124
-}`
-
+}
+```
 ### GET /api/dashboard/quick-stats
 
 Returns quick overview statistics.
 
 **JSON Response**
 
-JSON
+```JSON
 
-`{
+{
   "success_rate": 80.0,
   "total_study_sessions": 4,
   "total_active_groups": 3,
   "study_streak_days": 4
-}`
-
+}
+```
 ### GET /api/study_activities/:id
 
 **JSON Response**
 
-JSON
+```JSON
 
-`{
+{
   "id": 1,
   "name": "Vocabulary Quiz",
   "thumbnail_url": "https://example.com/thumbnail.jpg",
   "description": "Practice your vocabulary with flashcards"
-}`
-
+}
+```
 ### GET /api/study_activities/:id/study_sessions
 
 - Pagination with 100 items per page
 
-JSON
+```JSON
 
-`{
+{
   "items": [
     {
       "id": 123,
@@ -152,8 +151,8 @@ JSON
     "total_items": 100,
     "items_per_page": 20
   }
-}`
-
+}
+```
 ### POST /api/study_activities
 
 **Request Params**
@@ -163,19 +162,19 @@ JSON
 
 **JSON Response**
 
-JSON
+```JSON
 
-`{ "id": 124, "group_id": 123 }`
-
+{ "id": 124, "group_id": 123 }
+```
 ### GET /api/words
 
 - Pagination with 100 items per page
 
 **JSON Response**
 
-JSON
+```JSON
 
-`{
+{
   "items": [
     {
       "russian": "здравствуйте",
@@ -191,15 +190,15 @@ JSON
     "total_items": 500,
     "items_per_page": 100
   }
-}`
-
+}
+```
 ### GET /api/words/:id
 
 **JSON Response**
 
-JSON
+```JSON
 
-`{
+{
   "russian": "здравствуйте",
   "transliteration": "zdravstvuyte",
   "english": "hello",
@@ -213,17 +212,17 @@ JSON
       "name": "Basic Greetings"
     }
   ]
-}`
-
+}
+```
 ### GET /api/groups
 
 - Pagination with 100 items per page
 
 **JSON Response**
 
-JSON
+```JSON
 
-`{
+{
   "items": [
     {
       "id": 1,
@@ -237,29 +236,29 @@ JSON
     "total_items": 10,
     "items_per_page": 100
   }
-}`
-
+}
+```
 ### GET /api/groups/:id
 
 **JSON Response**
 
-JSON
+```JSON
 
-`{
+{
   "id": 1,
   "name": "Basic Greetings",
   "stats": {
     "total_word_count": 20
   }
-}`
-
+}
+```
 ### GET /api/groups/:id/words
 
 **JSON Response**
 
-JSON
+```JSON
 
-`{
+{
   "items": [
     {
       "russian": "здравствуйте",
@@ -275,15 +274,15 @@ JSON
     "total_items": 20,
     "items_per_page": 100
   }
-}`
-
+}
+```
 ### GET /api/groups/:id/study_sessions
 
 **JSON Response**
 
-JSON
+```JSON
 
-`{
+{
   "items": [
     {
       "id": 123,
@@ -300,17 +299,17 @@ JSON
     "total_items": 5,
     "items_per_page": 100
   }
-}`
-
+}
+```
 ### GET /api/study_sessions
 
 - Pagination with 100 items per page
 
 **JSON Response**
 
-JSON
+```JSON
 
-`{
+{
   "items": [
     {
       "id": 123,
@@ -327,32 +326,32 @@ JSON
     "total_items": 100,
     "items_per_page": 100
   }
-}`
-
+}
+```
 ### GET /api/study_sessions/:id
 
 **JSON Response**
 
-JSON
+```JSON
 
-`{
+{
   "id": 123,
   "activity_name": "Vocabulary Quiz",
   "group_name": "Basic Greetings",
   "start_time": "2025-02-08T17:20:23-05:00",
   "end_time": "2025-02-08T17:30:23-05:00",
   "review_items_count": 20
-}`
-
+}
+```
 ### GET /api/study_sessions/:id/words
 
 - Pagination with 100 items per page
 
 **JSON Response**
 
-JSON
+```JSON
 
-`{
+{
   "items": [
     {
       "russian": "здравствуйте",
@@ -368,30 +367,30 @@ JSON
     "total_items": 20,
     "items_per_page": 100
   }
-}`
-
+}
+```
 ### POST /api/reset_history
 
 **JSON Response**
 
-JSON
+```JSON
 
-`{
+{
   "success": true,
   "message": "Study history has been reset"
-}`
-
+}
+```
 ### POST /api/full_reset
 
 **JSON Response**
 
-JSON
+```JSON
 
-`{
+{
   "success": true,
   "message": "System has been fully reset"
-}`
-
+}
+```
 ### POST /api/study_sessions/:id/words/:word_id/review
 
 **Request Params**
@@ -402,24 +401,24 @@ JSON
 
 **Request Payload**
 
-JSON
+```JSON
 
-`{
+{
   "correct": true
-}`
-
+}
+```
 **JSON Response**
 
-JSON
+```JSON
 
-`{
+{
   "success": true,
   "word_id": 1,
   "study_session_id": 123,
   "correct": true,
   "created_at": "2025-02-08T17:33:07-05:00"
-}`
-
+}
+```
 ## Task Runner Tasks
 
 Let's list out possible tasks we need for our Russian language portal.
@@ -444,13 +443,14 @@ In our task, we should have DSL to specify each seed file and its expected group
 
 **Example Seed Data Structure (for JSON seed files):**
 
-JSON
+```JSON
 
-`[
+[
   {
     "russian": "платить",
     "transliteration": "platit",
     "english": "to pay"
   },
   ...
-]`
+]
+```
