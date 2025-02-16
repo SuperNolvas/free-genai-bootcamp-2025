@@ -2,12 +2,15 @@ from comps import MicroService, ServiceOrchestrator, ServiceType, ServiceRoleTyp
 from comps.cores.proto.api_protocol import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, UsageInfo
 
 import os
+import httpx
+from fastapi import FastAPI, HTTPException
 
 EMBEDDING_SERVICE_HOST_IP = os.getenv("EMBEDDING_SERVICE_HOST_IP", "0.0.0.0")
 EMBEDDING_SERVICE_PORT = os.getenv("EMBEDDING_SERVICE_PORT", 6000)
 OLLAMA_LLM_SERVICE_HOST_IP = os.getenv("OLLAMA_LLM_SERVICE_HOST_IP", "0.0.0.0")
-OLLAMA_LLM_SERVICE_PORT = os.getenv("OLLAMA_LLM_SERVICE_PORT", 9000)
+OLLAMA_LLM_SERVICE_PORT = os.getenv("OLLAMA_LLM_SERVICE_PORT", 11434)
 
+app = FastAPI()
 
 class ExampleService:
     def __init__(self, host="0.0.0.0", port=8000):
@@ -68,22 +71,17 @@ class ExampleService:
                 "stream": False  # disable streaming for now
             }
             
-            # Schedule the request through the orchestrator
-            result = await self.megaservice.schedule(ollama_request)
+            # Send the request to the Ollama service
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"http://{OLLAMA_LLM_SERVICE_HOST_IP}:{OLLAMA_LLM_SERVICE_PORT}/v1/chat/completions",
+                    json=ollama_request
+                )
+                response.raise_for_status()
+                result = response.json()
             
             # Extract the actual content from the response
-            if isinstance(result, tuple) and len(result) > 0:
-                llm_response = result[0].get('ollama_llm/MicroService')
-                if hasattr(llm_response, 'body'):
-                    # Read and process the response
-                    response_body = b""
-                    async for chunk in llm_response.body_iterator:
-                        response_body += chunk
-                    content = response_body.decode('utf-8')
-                else:
-                    content = "No response content available"
-            else:
-                content = "Invalid response format"
+            content = result.get("choices", [{}])[0].get("message", {}).get("content", "No response content available")
 
             # Create the response
             response = ChatCompletionResponse(
@@ -114,3 +112,11 @@ class ExampleService:
 example = ExampleService()
 example.add_remote_service()
 example.start()
+
+@app.get("/")
+async def read_root():
+    return {"message": "Welcome to the Opea Megaservice"}
+
+@app.get("/favicon.ico")
+async def favicon():
+    return {"message": "Favicon not found"}
