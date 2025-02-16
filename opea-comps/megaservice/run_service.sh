@@ -2,7 +2,7 @@
 
 # Set environment variables
 export OLLAMA_LLM_SERVICE_HOST_IP=0.0.0.0
-export OLLAMA_LLM_SERVICE_PORT=9000
+export OLLAMA_LLM_SERVICE_PORT=11434
 
 # Ensure Docker daemon is running
 sudo systemctl start docker
