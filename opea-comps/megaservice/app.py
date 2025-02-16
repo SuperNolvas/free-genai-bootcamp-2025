@@ -1,4 +1,4 @@
-from comps import MicroService, ServiceOrchestrator
+from comps import MicroService, ServiceOrchestrator, ServiceType
 
 import os
 
