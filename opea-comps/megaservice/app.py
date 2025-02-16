@@ -1,5 +1,5 @@
 from comps import MicroService, ServiceOrchestrator, ServiceType, ServiceRoleType
-from comps.cores.proto.api_protocol import ChatCompletionRequest, ChatCompletionResponse
+from comps.cores.proto.api_protocol import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, UsageInfo
 
 import os
 
@@ -13,6 +13,7 @@ class ExampleService:
     def __init__(self, host="0.0.0.0", port=8000):
         self.host = host
         self.port = port
+        self.endpoint = "/v1/chat/example-service"
         self.megaservice = ServiceOrchestrator()
 
     def add_remote_service(self):
@@ -53,4 +54,5 @@ class ExampleService:
 
         example = ExampleService()
         example.add_remote_service()
+        example.start()
         example.megaservice.run()
