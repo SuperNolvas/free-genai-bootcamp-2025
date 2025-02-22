@@ -24,6 +24,10 @@ if 'transcript' not in st.session_state:
     st.session_state.transcript = None
 if 'messages' not in st.session_state:
     st.session_state.messages = []
+if 'current_query' not in st.session_state:
+    st.session_state.current_query = ''
+if 'rag_feedback' not in st.session_state:
+    st.session_state.rag_feedback = []
 
 def render_header():
     """Render the header section"""
@@ -294,45 +298,236 @@ def render_structured_stage():
 def render_rag_stage():
     """Render the RAG implementation stage"""
     from backend.rag import RAGSystem
-    
-    # Initialize RAG system if not in session state
-    if 'rag_system' not in st.session_state:
-        st.session_state.rag_system = RAGSystem()
+    import os
+    from datetime import datetime
     
     st.header("RAG System")
     
-    # Query input
-    query = st.text_input(
-        "Test Query",
-        placeholder="Enter a question about Japanese..."
-    )
-    
-    col1, col2 = st.columns(2)
-    
-    if query:
+    # Add system status in sidebar
+    with st.sidebar:
+        st.subheader("System Status")
+        if 'rag_system' in st.session_state and st.session_state.rag_system:
+            try:
+                doc_count = st.session_state.rag_system.collection.count()
+                if doc_count > 0:
+                    st.success(f"✅ System Active - {doc_count} documents loaded")
+                else:
+                    st.warning("⚠️ No documents loaded")
+            except Exception as e:
+                st.error("❌ System Error")
+                st.error(str(e))
+
+        # Reset button with confirmation
+        if st.button("🔄 Reset System", key="reset_system_btn"):
+            if 'rag_system' in st.session_state:
+                with st.spinner("Resetting system..."):
+                    try:
+                        st.session_state.rag_system.reset_collection()
+                        st.success("System reset successful!")
+                    except:
+                        pass
+                st.session_state.rag_system = None
+                st.rerun()
+
+    # Initialize RAG system
+    if 'rag_system' not in st.session_state:
         try:
-            # Get response from RAG system
-            result = st.session_state.rag_system.query(query)
-            
-            with col1:
-                st.subheader("Retrieved Context")
-                for i, context in enumerate(result['contexts'], 1):
-                    with st.expander(f"Context {i}"):
-                        st.write(context)
-            
-            with col2:
-                st.subheader("Generated Response")
-                st.write(result['answer'])
+            with st.spinner("🚀 Initializing RAG system..."):
+                st.session_state.rag_system = RAGSystem()
+                transcript_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'backend', 'transcripts')
+                
+                if os.path.exists(transcript_dir):
+                    with st.status("Loading transcripts...", expanded=True) as status:
+                        st.write("Processing documents...")
+                        st.session_state.rag_system.load_transcripts(transcript_dir)
+                        doc_count = st.session_state.rag_system.collection.count()
+                        status.update(label=f"✅ Loaded {doc_count} documents!", state="complete")
+                else:
+                    st.warning("⚠️ No transcripts directory found")
+                    st.info("Please ensure transcript files are present in backend/transcripts")
+                    
         except Exception as e:
-            st.error(f"Error processing query: {str(e)}")
-    else:
-        with col1:
-            st.subheader("Retrieved Context")
-            st.info("Enter a query to see retrieved contexts")
+            st.error("❌ System Initialization Failed")
+            st.error(str(e))
+            return
+
+    # Main interface
+    if st.session_state.rag_system:
+        tab1, tab2, tab3 = st.tabs(["Query Interface", "System Stats", "Debug"])
+        
+        with tab1:
+            # Example queries
+            with st.expander("📚 Example Queries"):
+                example_queries = [
+                    "What are common greeting patterns used in the dialogues?",
+                    "How do people typically ask for directions?",
+                    "What kinds of locations are mentioned in the conversations?",
+                    "What are some polite expressions used in these dialogues?",
+                    "How do people typically respond to questions in these conversations?"
+                ]
+                
+                col1, col2 = st.columns(2)
+                for i, query in enumerate(example_queries):
+                    with col1 if i % 2 == 0 else col2:
+                        if st.button(query, key=f"example_query_{i}", use_container_width=True):
+                            st.session_state.current_query = query
+                            st.rerun()
             
-        with col2:
-            st.subheader("Generated Response")
-            st.info("Enter a query to see the generated response")
+            # Query input
+            query = st.text_input(
+                "🔍 Ask about Japanese language patterns",
+                value=st.session_state.get('current_query', ''),
+                placeholder="Enter your question about Japanese expressions, grammar, or dialogue patterns...",
+                key="query_input"
+            )
+            
+            if query:
+                try:
+                    with st.spinner("🤔 Processing query..."):
+                        result = st.session_state.rag_system.query(query)
+                    
+                    # Display results in columns
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.subheader("📑 Retrieved Contexts")
+                        if result.get('contexts'):
+                            for i, (context, metadata) in enumerate(zip(
+                                result['contexts'], 
+                                result['metadata'].get('context_sources', [''] * len(result['contexts']))
+                            ), 1):
+                                with st.expander(f"Context {i}"):
+                                    st.caption(f"Source: {metadata}")
+                                    if 'metadata' in result and 'relevance_scores' in result['metadata']:
+                                        score = result['metadata']['relevance_scores'][i-1]
+                                        st.progress(score, f"Relevance: {score:.2f}")
+                                    st.markdown(context)
+                        else:
+                            st.info("No relevant contexts found")
+                    
+                    with col2:
+                        st.subheader("💡 Answer")
+                        if result.get('answer'):
+                            st.markdown(result['answer'])
+                            
+                            # Show metadata
+                            with st.expander("Query Details"):
+                                st.json({
+                                    "timestamp": result['metadata']['timestamp'],
+                                    "num_contexts": result['metadata']['num_contexts'],
+                                    "status": result['metadata']['status']
+                                })
+                            
+                            # Feedback system with connection to RAG system
+                            st.divider()
+                            st.caption("Was this response helpful?")
+                            fb_col1, fb_col2 = st.columns(2)
+                            with fb_col1:
+                                if st.button("👍", key=f"fb_yes_{hash(query)}"):
+                                    st.session_state.rag_system.add_feedback(
+                                        query=query,
+                                        feedback="positive",
+                                        contexts=result.get('contexts', [])
+                                    )
+                                    st.success("Thanks for your feedback!")
+                            with fb_col2:
+                                if st.button("👎", key=f"fb_no_{hash(query)}"):
+                                    st.session_state.rag_system.add_feedback(
+                                        query=query,
+                                        feedback="negative",
+                                        contexts=result.get('contexts', [])
+                                    )
+                                    st.error("Thanks for your feedback!")
+                        else:
+                            st.error("No response generated")
+                
+                except Exception as e:
+                    st.error("Error processing query")
+                    st.error(str(e))
+                    if hasattr(st.session_state.rag_system, 'get_logs'):
+                        with st.expander("System Logs"):
+                            logs = st.session_state.rag_system.get_logs()
+                            for log in logs[-5:]:
+                                if "!" in log:
+                                    st.error(log)
+                                elif "✓" in log:
+                                    st.success(log)
+                                else:
+                                    st.info(log)
+        
+        with tab2:
+            st.subheader("📊 System Statistics")
+            try:
+                stats_col1, stats_col2 = st.columns(2)
+                with stats_col1:
+                    doc_count = st.session_state.rag_system.collection.count()
+                    st.metric("Documents Loaded", doc_count)
+                    
+                    # Use RAG system's feedback stats
+                    feedback_stats = st.session_state.rag_system.get_feedback_stats()
+                    if feedback_stats['total_feedback'] > 0:
+                        st.metric("User Satisfaction", f"{feedback_stats['positive_rate']:.1f}%")
+                        st.metric("Total Feedback", feedback_stats['total_feedback'])
+                
+                with stats_col2:
+                    if hasattr(st.session_state.rag_system, 'get_cache_stats'):
+                        cache_stats = st.session_state.rag_system.get_cache_stats()
+                        st.metric("Cached Queries", cache_stats['cache_size'])
+                        
+                    # Show recent feedback
+                    if feedback_stats.get('recent_feedback'):
+                        st.subheader("Recent Feedback")
+                        for fb in feedback_stats['recent_feedback']:
+                            icon = "👍" if fb['feedback'] == "positive" else "👎"
+                            st.text(f"{icon} {fb['query'][:50]}...")
+            except Exception as e:
+                st.error(f"Error loading statistics: {str(e)}")
+        
+        with tab3:
+            st.subheader("🛠️ Debug Information")
+            
+            # System logs
+            with st.expander("System Logs"):
+                if hasattr(st.session_state.rag_system, 'get_logs'):
+                    logs = st.session_state.rag_system.get_logs()
+                    for log in logs:
+                        if "!" in log:
+                            st.error(log)
+                        elif "✓" in log:
+                            st.success(log)
+                        else:
+                            st.info(log)
+            
+            # Collection stats
+            with st.expander("Collection Details"):
+                try:
+                    stats = {
+                        "document_count": st.session_state.rag_system.collection.count(),
+                        "collection_name": st.session_state.rag_system.collection.name,
+                        "embedding_model": st.session_state.rag_system.embedding_function.model_name
+                    }
+                    st.json(stats)
+                except Exception as e:
+                    st.error(f"Error getting collection details: {str(e)}")
+            
+            # Cache info
+            if hasattr(st.session_state.rag_system, 'get_cache_stats'):
+                with st.expander("Cache Information"):
+                    cache_stats = st.session_state.rag_system.get_cache_stats()
+                    st.json(cache_stats)
+                    if st.button("Clear Cache", key="clear_cache_debug"):
+                        st.session_state.rag_system.clear_cache()
+                        st.success("Cache cleared!")
+                        st.rerun()
+
+            # Add feedback management
+            with st.expander("Feedback Management"):
+                feedback_stats = st.session_state.rag_system.get_feedback_stats()
+                st.json(feedback_stats)
+                if st.button("Clear Feedback History", key="clear_feedback"):
+                    st.session_state.rag_system.clear_feedback()
+                    st.success("Feedback history cleared!")
+                    st.rerun()
 
 def render_interactive_stage():
     """Render the interactive learning stage"""
