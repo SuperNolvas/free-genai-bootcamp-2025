@@ -1,34 +1,116 @@
 # Language Learning Assistant
 
-A web based language learning application with the ability to take transcriptions from YouTube and process them via Amazon Bedrock
+A web-based interactive language learning application that helps users learn Japanese through real-world content. The application processes Japanese language content from YouTube videos and uses AI to provide contextual learning assistance.
 
-### Install Prerequisites
+## Features
 
-Setup Amazon Bedrock
+- Process Japanese language content from YouTube videos
+- Interactive Q&A about the content using AI
+- Contextual understanding of Japanese language patterns
+- Real-time translations and explanations
+- Support for Japanese learning through authentic materials
+- Vector database for efficient content retrieval
+- Multilingual embedding model support
+- Caching system for faster responses
+- User feedback collection system
 
-* Create AWS Account
-* Create an IAM User
-* Add Bedrock Access Policy and Inline policy for model access 
+## Current Development Status
 
-https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started-api.html
+- ✅ YouTube transcript processing
+- ✅ Japanese text preprocessing
+- ✅ AI-powered Q&A system
+- ✅ Context-aware responses
+- ✅ Streamlit web interface
+- ✅ Vector database integration
+- ✅ Caching system
+- ⏳ Additional language support (Planned)
+- ⏳ User progress tracking (Planned)
 
-* Enable LLM model access via Amazon Bedrock management console in AWS
-* Create AccessID and AccessKey envars to enable boto3 access to models
+## Prerequisites
 
-https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html
+1. **System Requirements**
+   - Python 3.8 or higher
+   - pip package manager
+   - At least 4GB RAM recommended for embedding models
+   - Disk space for storing transcripts and embeddings
 
+2. **Required Packages**
+   - chromadb (Vector database for semantic search)
+   - streamlit (Web interface)
+   - boto3 (AWS SDK for Python)
+   - youtube-transcript-api (YouTube transcript processing)
+   - sentence-transformers (Text embedding model)
 
-### Running Frontend
+3. **Amazon Bedrock Setup**
+   - Active AWS Account
+   - IAM User with appropriate permissions
+   - Amazon Bedrock model access enabled
+   - AWS credentials configured
 
-```sh
-streamlit run frontend/main.py
-```
+## Installation
 
-### Running Backend
+1. **Clone the Repository**
+   ```sh
+   git clone [repository-url]
+   cd language-learning-assistant
+   ```
 
-```sh
-cd backend
-pip install -r requirements.txt
-python backend/main.py
-```
+2. **Set Up AWS Credentials**
+   - Follow [AWS Bedrock Getting Started Guide](https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started-api.html)
+   - Configure AWS credentials using one of these methods:
+     - Environment variables (AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY)
+     - AWS credentials file (~/.aws/credentials)
+     - IAM roles for AWS services
+
+3. **Install Dependencies**
+   ```sh
+   cd backend
+   pip install -r requirements.txt
+   ```
+
+## Running the Application
+
+1. **Start the Backend**
+   ```sh
+   cd backend
+   python main.py
+   ```
+
+2. **Launch the Frontend**
+   ```sh
+   streamlit run frontend/main.py
+   ```
+   The application will open in your default web browser.
+
+## Usage
+
+1. Input a YouTube URL containing Japanese content
+2. Wait for the system to process the transcript
+3. Ask questions about the content in English
+4. Receive detailed explanations with Japanese examples and translations
+
+## Usage Examples
+
+1. **Learning from Dialogues**
+   - Input a Japanese learning video URL
+   - Ask questions about vocabulary and grammar
+   - Get explanations with real context
+
+2. **Pattern Recognition**
+   - System highlights common language patterns
+   - Provides usage examples from the content
+   - Shows cultural context when relevant
+
+3. **Practice Assistance**
+   - Use real-world examples for learning
+   - Get instant feedback on understanding
+   - Review content with different perspectives
+
+## Support
+
+For issues and feature requests, please open an issue in the repository.
+
+## License
+
+This project is licensed under the terms of the LICENSE file included in the repository.
 
