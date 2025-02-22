@@ -531,33 +531,274 @@ def render_rag_stage():
 
 def render_interactive_stage():
     """Render the interactive learning stage"""
+    from backend.interactive import InteractiveLearning
+    
     st.header("Interactive Learning")
+    
+    # Initialize interactive learning system
+    if 'interactive_system' not in st.session_state:
+        st.session_state.interactive_system = InteractiveLearning()
+        
+    if 'current_practice_item' not in st.session_state:
+        st.session_state.current_practice_item = None
     
     # Practice type selection
     practice_type = st.selectbox(
         "Select Practice Type",
-        ["Dialogue Practice", "Vocabulary Quiz", "Listening Exercise"]
+        ["dialogue", "vocabulary", "listening"],
+        format_func=lambda x: x.title() + " Practice"
     )
     
-    col1, col2 = st.columns([2, 1])
+    # Generate new practice item button
+    if st.button("Generate New Practice Item", key="generate_practice"):
+        try:
+            with st.spinner("Generating practice..."):
+                st.session_state.current_practice_item = st.session_state.interactive_system.generate_practice_item(practice_type)
+        except Exception as e:
+            st.error(f"Error generating practice: {str(e)}")
     
-    with col1:
-        st.subheader("Practice Scenario")
-        # Placeholder for scenario
-        st.info("Practice scenario will appear here")
+    # Display practice content
+    if st.session_state.current_practice_item:
+        col1, col2 = st.columns([2, 1])
         
-        # Placeholder for multiple choice
-        options = ["Option 1", "Option 2", "Option 3", "Option 4"]
-        selected = st.radio("Choose your answer:", options)
+        with col1:
+            st.subheader("Practice Scenario")
+            
+            if practice_type == "vocabulary":
+                # Create styled containers for vocabulary practice
+                st.markdown("""
+                    <style>
+                    .vocab-card {
+                        padding: 20px;
+                        border-radius: 10px;
+                        background-color: #f0f2f6;
+                        margin-bottom: 20px;
+                        border-left: 5px solid #ff4b4b;
+                        overflow: hidden;
+                    }
+                    .question-section {
+                        margin-top: 25px;
+                        padding: 15px;
+                        border-radius: 5px;
+                        background-color: white;
+                    }
+                    .word-container {
+                        display: flex;
+                        flex-wrap: wrap;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 8px;
+                        margin: 10px 0;
+                        text-align: center;
+                        width: 100%;
+                    }
+                    .target-word {
+                        font-size: 1.5em;
+                        color: #ff4b4b;
+                        padding: 4px 12px;
+                        white-space: nowrap;
+                        background-color: rgba(255,75,75,0.1);
+                        border-radius: 4px;
+                        margin: 4px 0;
+                        transition: all 0.3s ease;
+                        display: inline-block;
+                        position: relative;
+                    }
+                    .target-word:hover {
+                        transform: scale(1.1);
+                        background-color: rgba(255,75,75,0.15);
+                        box-shadow: 0 2px 8px rgba(255,75,75,0.2);
+                    }
+                    .context-text {
+                        flex: 1;
+                        min-width: 120px;
+                        display: inline-block;
+                        line-height: 1.5;
+                        padding: 4px;
+                    }
+                    @media (max-width: 640px) {
+                        .word-container {
+                            padding: 8px;
+                        }
+                        .context-text {
+                            width: 100%;
+                            text-align: center;
+                        }
+                    }
+                    @media (max-width: 400px) {
+                        .word-container {
+                            flex-direction: column;
+                        }
+                        .target-word {
+                            width: auto;
+                            max-width: 90%;
+                        }
+                    }
+                    </style>
+                """, unsafe_allow_html=True)
+                
+                # Vocabulary word section
+                st.markdown('<div class="vocab-card">', unsafe_allow_html=True)
+                st.subheader("Vocabulary Word")
+                context = st.session_state.current_practice_item.context
+                if "**" in context:
+                    parts = context.split("**")
+                    if len(parts) >= 3:
+                        st.markdown('<div class="word-container">', unsafe_allow_html=True)
+                        if parts[0].strip():
+                            st.markdown(f'<div class="context-text">{parts[0]}</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="target-word">{parts[1]}</div>', unsafe_allow_html=True)
+                        if parts[2].strip():
+                            st.markdown(f'<div class="context-text">{parts[2]}</div>', unsafe_allow_html=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                else:
+                    st.write(context)
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Question section
+                st.markdown('<div class="question-section">', unsafe_allow_html=True)
+                st.markdown("### Test Your Understanding")
+                st.markdown(f"**Question:**\n{st.session_state.current_practice_item.question}")
+                st.markdown('</div>', unsafe_allow_html=True)
+            elif practice_type == "dialogue":
+                # Create styled containers for dialogue practice
+                st.markdown("""
+                    <style>
+                    .dialogue-card {
+                        padding: 20px;
+                        border-radius: 10px;
+                        background-color: #f0f2f6;
+                        margin-bottom: 20px;
+                        border-left: 5px solid #4b96ff;
+                    }
+                    </style>
+                """, unsafe_allow_html=True)
+                
+                # Dialogue section
+                st.markdown('<div class="dialogue-card">', unsafe_allow_html=True)
+                st.subheader("Dialogue Context")
+                # Split dialogue into speaker turns for better readability
+                dialogue_lines = st.session_state.current_practice_item.context.split('\n')
+                for line in dialogue_lines:
+                    if line.strip():
+                        if ':' in line:
+                            speaker, text = line.split(':', 1)
+                            st.markdown(f"**{speaker}:** {text}")
+                        else:
+                            st.markdown(line)
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                st.markdown("### Comprehension Question")
+                st.markdown(f"**{st.session_state.current_practice_item.question}**")
+            
+            elif practice_type == "listening":
+                # Create styled containers for listening practice
+                st.markdown("""
+                    <style>
+                    .listening-card {
+                        padding: 20px;
+                        border-radius: 10px;
+                        background-color: #f0f2f6;
+                        margin-bottom: 20px;
+                        border-left: 5px solid #4bff4b;
+                    }
+                    .listening-controls {
+                        padding: 10px;
+                        background-color: white;
+                        border-radius: 5px;
+                        margin: 10px 0;
+                    }
+                    </style>
+                """, unsafe_allow_html=True)
+                
+                st.markdown('<div class="listening-card">', unsafe_allow_html=True)
+                st.subheader("Listening Exercise")
+                
+                # Show listening controls
+                st.markdown('<div class="listening-controls">', unsafe_allow_html=True)
+                if 'listening_revealed' not in st.session_state:
+                    st.session_state.listening_revealed = False
+                    
+                col1, col2 = st.columns([1, 3])
+                with col1:
+                    if st.button("🔊 Play", key="play_listening"):
+                        st.session_state.listening_revealed = True
+                with col2:
+                    if st.button("🔄 Reset", key="reset_listening"):
+                        st.session_state.listening_revealed = False
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Show dialogue content
+                if st.session_state.listening_revealed:
+                    dialogue_lines = st.session_state.current_practice_item.context.split('\n')
+                    for line in dialogue_lines:
+                        if line.strip():
+                            if ':' in line:
+                                speaker, text = line.split(':', 1)
+                                st.markdown(f"**{speaker}:** {text}")
+                            else:
+                                st.markdown(line)
+                else:
+                    st.info("👂 Click 'Play' to listen to the conversation")
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                st.markdown("### Listen and Answer")
+                if st.session_state.listening_revealed:
+                    st.markdown(f"**{st.session_state.current_practice_item.question}**")
+                else:
+                    st.markdown("*Question will appear after playing the conversation...*")
+            
+            else:
+                st.markdown(f"**Context:**\n{st.session_state.current_practice_item.context}")
+                st.markdown(f"**Question:**\n{st.session_state.current_practice_item.question}")
+            
+            # Multiple choice options
+            selected = st.radio(
+                "Choose your answer:",
+                st.session_state.current_practice_item.options,
+                key="practice_options"
+            )
+            
+            # Check answer button
+            if st.button("Submit Answer", key="check_answer"):
+                result = st.session_state.interactive_system.check_answer(
+                    st.session_state.current_practice_item,
+                    selected
+                )
+                
+                if result['is_correct']:
+                    st.success("✅ Correct!")
+                else:
+                    st.error(f"❌ Incorrect. The correct answer was: {result['correct_answer']}")
+                
+                st.info(f"Explanation: {result['explanation']}")
+                st.metric("Current Score", result['score'])
         
-    with col2:
-        st.subheader("Audio")
-        # Placeholder for audio player
-        st.info("Audio will appear here")
-        
-        st.subheader("Feedback")
-        # Placeholder for feedback
-        st.info("Feedback will appear here")
+        with col2:
+            if practice_type == "listening":
+                st.subheader("Audio")
+                if st.session_state.current_practice_item.audio_url:
+                    st.audio(st.session_state.current_practice_item.audio_url)
+                else:
+                    st.info("Audio not available for this practice item")
+            
+            # Show session statistics
+            st.subheader("Session Stats")
+            stats = st.session_state.interactive_system.get_session_stats()
+            st.metric("Accuracy", f"{stats['accuracy']:.1f}%")
+            st.metric("Questions Completed", stats['total_questions'])
+            
+            # Reset session button
+            if st.button("Reset Session", key="reset_session"):
+                st.session_state.interactive_system.reset_session()
+                st.session_state.current_practice_item = None
+                st.rerun()
+            
+            # Show practice history
+            with st.expander("Practice History"):
+                for practice in stats['practice_history']:
+                    icon = "✅" if practice['is_correct'] else "❌"
+                    st.text(f"{icon} {practice['practice_type'].title()}: {practice['question'][:50]}...")
 
 def main():
     render_header()
