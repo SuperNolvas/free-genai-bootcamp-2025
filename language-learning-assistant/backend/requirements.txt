@@ -2,3 +2,4 @@ chromadb
 streamlit
 boto3
 youtube-transcript-api
+sentence-transformers

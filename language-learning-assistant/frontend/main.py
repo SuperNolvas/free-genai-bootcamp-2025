@@ -293,6 +293,12 @@ def render_structured_stage():
 
 def render_rag_stage():
     """Render the RAG implementation stage"""
+    from backend.rag import RAGSystem
+    
+    # Initialize RAG system if not in session state
+    if 'rag_system' not in st.session_state:
+        st.session_state.rag_system = RAGSystem()
+    
     st.header("RAG System")
     
     # Query input
@@ -303,15 +309,30 @@ def render_rag_stage():
     
     col1, col2 = st.columns(2)
     
-    with col1:
-        st.subheader("Retrieved Context")
-        # Placeholder for retrieved contexts
-        st.info("Retrieved contexts will appear here")
-        
-    with col2:
-        st.subheader("Generated Response")
-        # Placeholder for LLM response
-        st.info("Generated response will appear here")
+    if query:
+        try:
+            # Get response from RAG system
+            result = st.session_state.rag_system.query(query)
+            
+            with col1:
+                st.subheader("Retrieved Context")
+                for i, context in enumerate(result['contexts'], 1):
+                    with st.expander(f"Context {i}"):
+                        st.write(context)
+            
+            with col2:
+                st.subheader("Generated Response")
+                st.write(result['answer'])
+        except Exception as e:
+            st.error(f"Error processing query: {str(e)}")
+    else:
+        with col1:
+            st.subheader("Retrieved Context")
+            st.info("Enter a query to see retrieved contexts")
+            
+        with col2:
+            st.subheader("Generated Response")
+            st.info("Enter a query to see the generated response")
 
 def render_interactive_stage():
     """Render the interactive learning stage"""
