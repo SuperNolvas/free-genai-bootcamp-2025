@@ -15,12 +15,13 @@ A web-based interactive language learning application that helps users learn Jap
 - Support for Japanese learning through authentic materials
 - Vector database for efficient content retrieval
 - Multilingual embedding model support
-- Caching system for faster responses
+- Advanced audio synthesis with Amazon Polly
+- Intelligent caching system for faster responses
 - User feedback collection system
 - Interactive learning exercises with:
   - Vocabulary practice with word highlighting
   - Dialogue comprehension exercises
-  - Listening practice with progressive reveal
+  - Real Japanese audio practice with native voices
   - Progress tracking and session statistics
   - Instant feedback and explanations
 
@@ -36,7 +37,8 @@ A web-based interactive language learning application that helps users learn Jap
 - ✅ Interactive learning implementation
   - Vocabulary quizzes
   - Dialogue comprehension
-  - Simulated listening exercises
+  - Native Japanese audio with Amazon Polly
+  - Intelligent audio caching
 - ⏳ Additional language support (Planned)
 - ⏳ User progress tracking (Planned)
 
@@ -55,10 +57,11 @@ A web-based interactive language learning application that helps users learn Jap
    - youtube-transcript-api (YouTube transcript processing)
    - sentence-transformers (Text embedding model)
 
-3. **Amazon Bedrock Setup**
+3. **AWS Services Setup**
    - Active AWS Account
    - IAM User with appropriate permissions
    - Amazon Bedrock model access enabled
+   - Amazon Polly access enabled
    - AWS credentials configured
 
 ## Installation
@@ -105,7 +108,7 @@ A web-based interactive language learning application that helps users learn Jap
 5. Practice with interactive exercises:
    - Study vocabulary in context with visual highlighting
    - Practice dialogue comprehension with structured conversations
-   - Test listening skills with progressive reveal exercises
+   - Improve listening skills with native Japanese voices
    - Track your progress with session statistics
 
 ## Usage Examples
@@ -128,7 +131,8 @@ A web-based interactive language learning application that helps users learn Jap
 4. **Interactive Learning**
    - Practice vocabulary with visual word highlighting
    - Test comprehension with dialogue exercises
-   - Improve listening skills with simulated audio practice
+   - Listen to native Japanese speakers with Amazon Polly voices
+   - Choose from multiple voice options for varied practice
    - Track learning progress with accuracy metrics
    - Review practice history and performance
 

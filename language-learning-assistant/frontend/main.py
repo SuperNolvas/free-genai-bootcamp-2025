@@ -3,14 +3,18 @@ from typing import Dict
 import json
 from collections import Counter
 import re
-
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from pathlib import Path
+
+# Add project root to Python path
+root_dir = Path(__file__).parent.parent
+if str(root_dir) not in sys.path:
+    sys.path.insert(0, str(root_dir))
 
 from backend.chat import BedrockChat
-from backend.get_transcript import YouTubeTranscriptDownloader  # Add this import
-
+from backend.get_transcript import YouTubeTranscriptDownloader
+from backend.interactive import InteractiveLearning
 
 # Page config
 st.set_page_config(

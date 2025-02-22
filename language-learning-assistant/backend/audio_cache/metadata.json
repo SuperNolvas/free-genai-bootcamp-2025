@@ -1,0 +1,28 @@
+{
+  "files": {
+    "0b8fe9e173f75568347f928cb47fb583": {
+      "size_bytes": 722,
+      "text": "日本語能力試験これからN5の懲戒試験を始めます問題用紙にメモを取ってもいいです問題用紙を開けてください問題1問題1では始めに質問を聞いてくださいそれから話を聞いて問題用紙の1から4の中から1番いいものを1つ選んでください",
+      "voice_id": "Kazuha",
+      "engine": "neural",
+      "last_accessed": "2025-02-22T23:16:32.380728"
+    },
+    "113540991f12a800c9a31ed403e8562a": {
+      "size_bytes": 512,
+      "text": "1番女の人と店の人が話しています女の人はどのTシャツを買いますかすみませんこれは白いのだけですか黒いのがありますか",
+      "voice_id": "Tomoko",
+      "engine": "neural",
+      "last_accessed": "2025-02-22T23:16:32.835151"
+    },
+    "cb9fc24a5093dc46fdb94b58e6c090da": {
+      "size_bytes": 7255,
+      "last_accessed": 1740267074.2510536,
+      "text": "いらっしゃいませ。",
+      "voice_id": "Mizuki",
+      "engine": "standard"
+    }
+  },
+  "total_size_bytes": 8489,
+  "last_cleanup": "2025-02-22T23:16:32.380728",
+  "max_size_mb": 100
+}

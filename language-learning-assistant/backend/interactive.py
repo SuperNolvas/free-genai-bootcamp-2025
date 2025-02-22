@@ -3,6 +3,7 @@ import random
 from dataclasses import dataclass
 from datetime import datetime
 from .rag import RAGSystem
+from .audio_generation import AudioGenerator
 
 @dataclass
 class PracticeItem:
@@ -18,12 +19,19 @@ class InteractiveLearning:
     def __init__(self):
         """Initialize interactive learning system with RAG integration"""
         self.rag_system = RAGSystem()
+        self.audio_generator = AudioGenerator()  # Add audio generator
         self.current_session = {
             "score": 0,
             "total_questions": 0,
             "practice_history": []
         }
-    
+        
+        # Cache available voices
+        self.available_voices = self.audio_generator.get_available_voices()
+        if not self.available_voices:
+            print("Warning: No Japanese voices available")
+            self.available_voices = [{"id": "Mizuki", "name": "Mizuki", "gender": "Female"}]
+
     def generate_practice_item(self, practice_type: str) -> PracticeItem:
         """Generate a practice item based on the selected type"""
         # Get relevant contexts from RAG system
@@ -163,19 +171,56 @@ class InteractiveLearning:
         3. options: Four possible answers (one correct)
         4. correct_answer: The correct answer choice
         5. explanation: Explanation focusing on what was heard
+        6. speakers: List of speaker names in the dialogue
+        7. segments: Array of text segments with speaker IDs
         
         Example format:
         {{
-            "formatted_dialogue": "Guide: いらっしゃいませ。\nVisitor: すみません、トイレはどこですか。\nGuide: あ、2階です。エレベーターの隣です。\nVisitor: ありがとうございます。",
+            "formatted_dialogue": "Guide: いらっしゃいませ。\\nVisitor: すみません、トイレはどこですか。\\nGuide: あ、2階です。エレベーターの隣です。\\nVisitor: ありがとうございます。",
             "question": "Where did the guide say the restroom was located?",
             "options": ["On the second floor", "Near the entrance", "On the first floor", "In the basement"],
             "correct_answer": "On the second floor",
-            "explanation": "The guide says '2階です' (ni-kai desu) meaning 'it's on the second floor' and adds that it's next to the elevator."
+            "explanation": "The guide says '2階です' (ni-kai desu) meaning 'it's on the second floor' and adds that it's next to the elevator.",
+            "speakers": ["Guide", "Visitor"],
+            "segments": [
+                {{"speaker": "Guide", "text": "いらっしゃいませ"}},
+                {{"speaker": "Visitor", "text": "すみません、トイレはどこですか"}},
+                {{"speaker": "Guide", "text": "あ、2階です。エレベーターの隣です"}},
+                {{"speaker": "Visitor", "text": "ありがとうございます"}}
+            ]
         }}"""
         
         result = self.rag_system.llm.generate_response(prompt)
         try:
             response = eval(result)
+            
+            # Generate audio for each dialogue segment
+            audio_files = []
+            available_voices = {
+                speaker: voice['id'] 
+                for speaker, voice in zip(response['speakers'], self.available_voices)
+            }
+            
+            # Generate audio for each segment with consistent voice per speaker
+            segments = response.get('segments', [])
+            for segment in segments:
+                speaker = segment['speaker']
+                text = segment['text']
+                voice_id = available_voices.get(speaker, "Mizuki")
+                
+                # Try to generate audio
+                audio_file = self.audio_generator.generate_audio(text, voice_id)
+                if audio_file:
+                    audio_files.append({
+                        'file': audio_file,
+                        'speaker': speaker,
+                        'text': text
+                    })
+            
+            # Get cache stats after generation
+            cache_stats = self.audio_generator.get_cache_stats()
+            print(f"[AUDIO] Cache status: {cache_stats['cache_size_mb']}MB used of {cache_stats['max_size_mb']}MB")
+            
             return PracticeItem(
                 question=response['question'],
                 context=response['formatted_dialogue'],
@@ -183,17 +228,21 @@ class InteractiveLearning:
                 correct_answer=response['correct_answer'],
                 explanation=response['explanation'],
                 type="listening",
-                audio_url=None  # Future: Add audio URL
+                audio_url=audio_files[0]['file'] if audio_files else None  # For now, use first audio file
             )
-        except Exception:
-            # Improved fallback with clear dialogue structure
+        except Exception as e:
+            print(f"[AUDIO] Error in listening exercise generation: {str(e)}")
+            # Fallback with basic dialogue
+            fallback_text = "いらっしゃいませ。"
+            audio_file = self.audio_generator.generate_audio(fallback_text, "Mizuki")
             return PracticeItem(
-                question="What did the visitor ask about?",
-                context="Staff: いらっしゃいませ。\nVisitor: すみません、駅はどこですか。\nStaff: まっすぐ行って、右です。\nVisitor: ありがとうございます。",
-                options=["The station location", "The time", "The restroom", "The entrance"],
-                correct_answer="The station location",
-                explanation="The visitor asks 'すみません、駅はどこですか。' meaning 'Excuse me, where is the station?'",
-                type="listening"
+                question="What did you hear in the greeting?",
+                context="Staff: いらっしゃいませ。",
+                options=["Welcome", "Goodbye", "Thank you", "Excuse me"],
+                correct_answer="Welcome",
+                explanation="You heard 'いらっしゃいませ' (irasshaimase) which means 'welcome'",
+                type="listening",
+                audio_url=audio_file
             )
 
     def check_answer(self, practice_item: PracticeItem, user_answer: str) -> Dict:
