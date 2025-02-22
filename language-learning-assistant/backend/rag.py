@@ -29,31 +29,31 @@ class LLMInterface:
         
         try:
             print("[LLM] Preparing request for Nova Micro...")
-            # Format specifically for Nova Micro API requirements
-            body = {
-                "inputText": prompt,
-                "textGenerationConfig": {
-                    "maxTokenCount": 512,
-                    "temperature": 0.7,
-                    "stopSequences": []
-                }
-            }
+            messages = [{
+                "role": "user",
+                "content": [{"text": prompt}]
+            }]
             
             print("[LLM] Sending request to Nova Micro...")
             response = self.bedrock_client.invoke_model(
                 modelId=self.model_id,
-                body=json.dumps(body)
+                body=json.dumps({"messages": messages})
             )
             
             print("[LLM] Processing Nova Micro response...")
             response_body = json.loads(response.get('body').read())
-            return response_body.get('outputText', "No response generated")
+            return response_body.get('output', {}).get('message', {}).get('content', [{}])[0].get('text', "No response generated")
             
         except Exception as e:
             error_msg = f"Error generating response: {str(e)}"
             print(f"[LLM ERROR] {error_msg}")
             print(f"[LLM ERROR] {traceback.format_exc()}")
-            return error_msg
+            raise
+
+class CustomSentenceTransformerEmbeddingFunction(embedding_functions.SentenceTransformerEmbeddingFunction):
+    def __init__(self, model_name: str, device: str = "cpu"):
+        super().__init__(model_name=model_name, device=device)
+        self.model_name = model_name  # Store model name as attribute
 
 class RAGSystem:
     def __init__(self, collection_name: str = "jlptn5-listening-comprehension"):
@@ -65,15 +65,17 @@ class RAGSystem:
         try:
             # Initialize embedding model
             try:
-                self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-                    model_name="intfloat/multilingual-e5-large",
+                self.model_name = "intfloat/multilingual-e5-large"
+                self.embedding_function = CustomSentenceTransformerEmbeddingFunction(
+                    model_name=self.model_name,
                     device="cpu"
                 )
                 self.log("✓ Embedding model initialized")
             except Exception as embed_error:
                 self.log(f"! Error initializing primary model: {str(embed_error)}")
-                self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-                    model_name="all-MiniLM-L6-v2",
+                self.model_name = "all-MiniLM-L6-v2"
+                self.embedding_function = CustomSentenceTransformerEmbeddingFunction(
+                    model_name=self.model_name,
                     device="cpu"
                 )
                 self.log("✓ Fallback embedding model initialized")
@@ -413,6 +415,15 @@ Answer:"""
             error_msg = f"Error loading transcripts: {str(e)}"
             self.log(f"! {error_msg}")
             raise
+
+    def get_model_details(self) -> Dict:
+        """Get details about the embedding model"""
+        return {
+            "embedding_function": {
+                "model_name": self.embedding_function.model_name
+            },
+            "device": "cpu"
+        }
 
     def clear_cache(self) -> None:
         """Clear the query cache"""
