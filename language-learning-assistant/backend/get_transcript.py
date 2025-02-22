@@ -59,7 +59,9 @@ class YouTubeTranscriptDownloader:
         Returns:
             bool: True if successful, False otherwise
         """
-        filename = f"./transcripts/{filename}.txt"
+        import os
+        transcripts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "transcripts")
+        filename = os.path.join(transcripts_dir, f"{filename}.txt")
         
         try:
             with open(filename, 'w', encoding='utf-8') as f:
@@ -96,4 +98,3 @@ def main(video_url, print_transcript=False):
 if __name__ == "__main__":
     video_id = "https://www.youtube.com/watch?v=sY7L5cfCWno&list=PLkGU7DnOLgRMl-h4NxxrGbK-UdZHIXzKQ"  # Extract from URL: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
     transcript = main(video_id, print_transcript=True)
-        

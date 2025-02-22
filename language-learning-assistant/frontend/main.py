@@ -201,7 +201,13 @@ def render_transcript_stage():
                     # Store the raw transcript text in session state
                     transcript_text = "\n".join([entry['text'] for entry in transcript])
                     st.session_state.transcript = transcript_text
-                    st.success("Transcript downloaded successfully!")
+                    
+                    # Save the transcript to file
+                    video_id = downloader.extract_video_id(url)
+                    if downloader.save_transcript(transcript, video_id):
+                        st.success("Transcript downloaded and saved successfully!")
+                    else:
+                        st.warning("Transcript downloaded but failed to save to file.")
                 else:
                     st.error("No transcript found for this video.")
             except Exception as e:
