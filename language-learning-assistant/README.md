@@ -17,8 +17,17 @@ https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started-api.html
 
 https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html
 
-### Install requirements
+
+### Running Frontend
 
 ```sh
-pip install -r backend/requirements.txt
+streamlit run frontend/main.py
+```
+
+### Running Backend
+
+```sh
+cd backend
+pip install -r requirements.txt
+python backend/main.py
 ```
