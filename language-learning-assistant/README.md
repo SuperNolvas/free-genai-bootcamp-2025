@@ -13,6 +13,12 @@ A web-based interactive language learning application that helps users learn Jap
 - Multilingual embedding model support
 - Caching system for faster responses
 - User feedback collection system
+- Interactive learning exercises with:
+  - Vocabulary practice with word highlighting
+  - Dialogue comprehension exercises
+  - Listening practice with progressive reveal
+  - Progress tracking and session statistics
+  - Instant feedback and explanations
 
 ## Current Development Status
 
@@ -23,6 +29,10 @@ A web-based interactive language learning application that helps users learn Jap
 - ✅ Streamlit web interface
 - ✅ Vector database integration
 - ✅ Caching system
+- ✅ Interactive learning implementation
+  - Vocabulary quizzes
+  - Dialogue comprehension
+  - Simulated listening exercises
 - ⏳ Additional language support (Planned)
 - ⏳ User progress tracking (Planned)
 
@@ -88,6 +98,11 @@ A web-based interactive language learning application that helps users learn Jap
 2. Wait for the system to process the transcript
 3. Ask questions about the content in English
 4. Receive detailed explanations with Japanese examples and translations
+5. Practice with interactive exercises:
+   - Study vocabulary in context with visual highlighting
+   - Practice dialogue comprehension with structured conversations
+   - Test listening skills with progressive reveal exercises
+   - Track your progress with session statistics
 
 ## Usage Examples
 
@@ -105,6 +120,13 @@ A web-based interactive language learning application that helps users learn Jap
    - Use real-world examples for learning
    - Get instant feedback on understanding
    - Review content with different perspectives
+
+4. **Interactive Learning**
+   - Practice vocabulary with visual word highlighting
+   - Test comprehension with dialogue exercises
+   - Improve listening skills with simulated audio practice
+   - Track learning progress with accuracy metrics
+   - Review practice history and performance
 
 ## Support
 
