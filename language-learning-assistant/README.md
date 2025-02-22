@@ -1,7 +1,7 @@
 # Language Learning Assistant
 
 <div align="center">
-  <img src="assets/Demo.gif" width="80%" alt="Language Learning Assistant Demo">
+  <img src="assets/Demo.gif" width="95%" alt="Language Learning Assistant Demo">
 </div>
 
 A web-based interactive language learning application that helps users learn Japanese through real-world content. The application processes Japanese language content from YouTube videos and uses AI to provide contextual learning assistance.
