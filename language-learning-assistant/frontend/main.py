@@ -246,17 +246,50 @@ def render_structured_stage():
     """Render the structured data stage"""
     st.header("Structured Data Processing")
     
+    from backend.structured_data import JLPTStructuredDataExtractor
+
+    # Only process if we have a transcript
+    if not st.session_state.transcript:
+        st.warning("Please load a transcript first in the 'Raw Transcript' stage")
+        return
+
+    # Initialize the extractor
+    extractor = JLPTStructuredDataExtractor()
+    
+    # Process button
+    if st.button("Process Transcript"):
+        with st.spinner("Extracting questions..."):
+            questions = extractor.extract_questions(st.session_state.transcript)
+            st.session_state.structured_questions = questions
+    
+    # Display results in two columns
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("Dialogue Extraction")
-        # Placeholder for dialogue processing
-        st.info("Dialogue extraction will be implemented here")
-        
+        st.subheader("Raw Transcript")
+        if st.session_state.transcript:
+            st.text_area(
+                "Source Text",
+                st.session_state.transcript,
+                height=400,
+                disabled=True
+            )
+    
     with col2:
-        st.subheader("Data Structure")
-        # Placeholder for structured data view
-        st.info("Structured data view will be implemented here")
+        st.subheader("Extracted Questions")
+        if 'structured_questions' in st.session_state and st.session_state.structured_questions:
+            for i, question in enumerate(st.session_state.structured_questions, 1):
+                with st.expander(f"Question {i}"):
+                    st.markdown("**Introduction:**")
+                    st.write(question.introduction)
+                    
+                    st.markdown("**Conversation:**")
+                    st.write(question.conversation)
+                    
+                    st.markdown("**Question:**")
+                    st.write(question.question)
+        else:
+            st.info("Click 'Process Transcript' to extract structured data")
 
 def render_rag_stage():
     """Render the RAG implementation stage"""
