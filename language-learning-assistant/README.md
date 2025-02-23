@@ -6,6 +6,63 @@
 
 A web-based interactive language learning application that helps users learn Japanese through real-world content. The application processes Japanese language content from YouTube videos and uses AI to provide contextual learning assistance.
 
+## System Architecture
+
+### RAG System Flow
+```mermaid
+graph TD
+    YT[YouTube Video] -->|Download| TR[Transcript]
+    TR -->|Process| PP[Text Preprocessing]
+    PP -->|Split into chunks| CH[Text Chunks]
+    CH -->|Embed| VDB[(ChromaDB<br/>Vector Database)]
+    
+    Q[User Query] -->|Embed| QE[Query Embedding]
+    QE -->|Semantic Search| VDB
+    VDB -->|Retrieve Context| CTX[Retrieved Context]
+    CTX -->|Generate Prompt| LLM[Amazon Bedrock LLM]
+    LLM -->|Generate Response| ANS[Answer]
+    
+    subgraph Feedback System
+        ANS -->|User Feedback| FB[Feedback Store]
+        FB -->|Improve| LLM
+    end
+    
+    subgraph Cache Layer
+        QC[Query Cache] -.->|Cache Hit| ANS
+        ANS -.->|Store| QC
+    end
+```
+
+### Interactive Learning Flow
+```mermaid
+graph TD
+    subgraph Content Generation
+        CTX[Context] -->|Generate| EX[Exercise]
+        EX -->|Generate Audio| PL[Amazon Polly]
+        PL -->|Cache| AC[(Audio Cache)]
+    end
+
+    subgraph Voice Management
+        VC[Voice Capabilities] -->|Check| PL
+        PL -->|Fallback| SE[Standard Engine]
+        PL -->|Primary| NE[Neural Engine]
+    end
+
+    subgraph Cache Management
+        AC -->|Check Size| CM[Cache Monitor]
+        CM -->|Cleanup| LRU[LRU Cleanup]
+        CM -->|Age Check| AGE[Age-based Cleanup]
+    end
+
+    subgraph User Interaction
+        EX -->|Present| UI[User Interface]
+        AC -->|Retrieve| UI
+        UI -->|Submit| ANS[User Answer]
+        ANS -->|Evaluate| FB[Feedback]
+        FB -->|Track| PROG[Progress Stats]
+    end
+```
+
 ## Features
 
 - Process Japanese language content from YouTube videos
