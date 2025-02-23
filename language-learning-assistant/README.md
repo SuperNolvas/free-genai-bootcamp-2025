@@ -51,7 +51,7 @@ graph TD
     subgraph Cache Management
         AC -->|Check Size| CM[Cache Monitor]
         CM -->|Cleanup| LRU[LRU Cleanup]
-        CM -->|Age Check| AGE[Age-based Cleanup]
+        CM -->|Data Age Check| AGE[Age-based Cleanup]
     end
 
     subgraph User Interaction
