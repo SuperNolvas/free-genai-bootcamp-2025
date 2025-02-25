@@ -6,3 +6,7 @@ manga-ocr>=0.1.8
 torch==2.6.0+cpu
 torchvision==0.21.0+cpu
 streamlit
+streamlit-drawable-canvas==0.9.3
+opencv-python
+numpy
+pillow
