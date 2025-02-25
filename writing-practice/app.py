@@ -72,6 +72,7 @@ def generate_sentence(word: Dict) -> tuple[str, str]:
 def process_canvas_data(image_data: np.ndarray) -> str:
     """Process canvas drawing and convert to text using MangaOCR"""
     if image_data is None:
+        st.error("No image data provided.")
         return ""
     try:
         # Save the original image for debugging
@@ -82,18 +83,22 @@ def process_canvas_data(image_data: np.ndarray) -> str:
         if len(image_data.shape) == 3 and image_data.shape[2] == 4:
             # Extract drawing data from alpha channel
             alpha = image_data[:, :, 3]
+            st.write("Alpha channel extracted.")
             
             # Create binary image (black drawing on white background)
             binary = np.full(alpha.shape, 255, dtype=np.uint8)
             binary[alpha > 0] = 0  # Where we drew becomes black
+            st.write("Binary image created.")
             
             # Add white padding
             pad = 100  # Larger padding
             padded = np.full((binary.shape[0] + 2*pad, binary.shape[1] + 2*pad), 255, dtype=np.uint8)
             padded[pad:-pad, pad:-pad] = binary
+            st.write("Padding added.")
             
             # Convert to PIL Image
             img = Image.fromarray(padded)
+            st.write("Converted to PIL Image.")
             
             # Save intermediate steps for debugging
             st.session_state['debug_alpha'] = Image.fromarray(alpha)
@@ -104,14 +109,17 @@ def process_canvas_data(image_data: np.ndarray) -> str:
             w, h = img.size
             img = img.resize((w*4, h*4), Image.Resampling.LANCZOS)
             st.session_state['debug_final'] = img
+            st.write("Image resized for OCR.")
             
             # Count pixels to verify drawing
             black_pixels = np.count_nonzero(binary == 0)
             st.session_state['debug_black_pixels'] = black_pixels
+            st.write(f"Black pixels counted: {black_pixels}")
             
             if black_pixels > 100:  # Only process if enough content
                 try:
                     st.session_state['debug_stage'] = 'Running OCR'
+                    st.write("Running OCR...")
                     # Save image to temporary file for OCR
                     img_path = "temp_kanji.png"
                     img.save(img_path)
@@ -120,18 +128,23 @@ def process_canvas_data(image_data: np.ndarray) -> str:
                     # Clean up
                     os.remove(img_path)
                     st.session_state['debug_ocr_result'] = text
+                    st.write(f"OCR result: {text}")
                     return text
                 except Exception as ocr_error:
                     st.session_state['debug_ocr_error'] = str(ocr_error)
+                    st.error(f"OCR Error: {ocr_error}")
                     return ""
             else:
                 st.session_state['debug_stage'] = 'Not enough content'
+                st.error("Not enough content to process.")
                 return ""
     except Exception as e:
         st.error(f"Error processing drawing: {str(e)}")
         st.session_state['debug_error'] = str(e)
         import traceback
         st.session_state['debug_traceback'] = traceback.format_exc()
+        st.error("Processing Error:")
+        st.code(st.session_state['debug_traceback'])
         return ""
 
 def grade_attempt(target_japanese: str, user_japanese: str) -> Dict:
@@ -181,6 +194,10 @@ def main():
         st.session_state.current_japanese = ""
     if "current_english" not in st.session_state:
         st.session_state.current_english = ""
+    if "canvas_key" not in st.session_state:
+        st.session_state.canvas_key = 0
+    if "canvas_image_data" not in st.session_state:
+        st.session_state.canvas_image_data = None
     
     if st.session_state.state == AppState.SETUP:
         if st.button("Generate Practice Text"):
@@ -203,10 +220,6 @@ def main():
         with col2:
             st.subheader("Write Kanji Here")
             
-            # Store canvas state
-            if 'canvas_key' not in st.session_state:
-                st.session_state.canvas_key = 0
-            
             # Drawing canvas
             canvas_result = st_canvas(
                 fill_color="rgba(255, 255, 255, 0)",
@@ -219,18 +232,23 @@ def main():
                 key=f"canvas_{st.session_state.canvas_key}"
             )
             
+            # Store canvas image data
+            if canvas_result.image_data is not None:
+                st.session_state.canvas_image_data = canvas_result.image_data
+            
             # Control buttons in columns
             col1, col2, col3 = st.columns(3)
             
             with col1:
                 if st.button("Clear"):
                     st.session_state.canvas_key += 1
+                    st.session_state.canvas_image_data = None
                     st.rerun()
             
             with col2:
                 if st.button("Submit"):
-                    if canvas_result.image_data is not None:
-                        result_text = process_canvas_data(canvas_result.image_data)
+                    if st.session_state.canvas_image_data is not None:
+                        result_text = process_canvas_data(st.session_state.canvas_image_data)
                         
                         if result_text:
                             st.markdown("### Results")
@@ -285,6 +303,7 @@ def main():
                 if st.button("Try Another"):
                     st.session_state.state = AppState.SETUP
                     st.session_state.canvas_key += 1
+                    st.session_state.canvas_image_data = None
                     st.rerun()
 
 if __name__ == "__main__":
