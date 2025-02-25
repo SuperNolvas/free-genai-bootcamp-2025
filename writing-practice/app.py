@@ -62,27 +62,16 @@ def fetch_words(group_id: str) -> List[Dict]:
 
 def generate_sentence(word: Dict) -> str:
     """Generate a practice sentence using Local LLM"""
-    with st.status(f"Generating practice sentence using: {word['japanese']} ({word['english']})...") as status:
-        status.update(label="Preparing prompt...", state="running", expanded=True)
-        
-        prompt = f"""Generate a simple sentence using the following word: {word['japanese']}
-        The grammar should be scoped to JLPTN5 grammar.
-        You can use the following vocabulary to construct a simple sentence:
-        - simple objects eg. book, car, ramen, sushi
-        - simple verbs, to drink, to eat, to meet
-        - simple times eg. tomorrow, today, yesterday
-        
-        Return only the English sentence."""
-        
-        status.update(label="Sending request to language model...", state="running")
-        response = generate_completion(prompt)
-        
-        if response:
-            status.update(label="Sentence generated successfully!", state="complete", expanded=False)
-        else:
-            status.update(label="Failed to generate sentence", state="error", expanded=True)
-            
-        return response
+    prompt = f"""Generate a simple sentence using the following word: {word['japanese']}
+    The grammar should be scoped to JLPTN5 grammar.
+    You can use the following vocabulary to construct a simple sentence:
+    - simple objects eg. book, car, ramen, sushi
+    - simple verbs, to drink, to eat, to meet
+    - simple times eg. tomorrow, today, yesterday
+    
+    Return only the English sentence."""
+    
+    return generate_completion(prompt)
 
 def transcribe_image(image) -> str:
     """Transcribe Japanese text from image using MangaOCR"""
@@ -157,14 +146,10 @@ def main():
     if "current_word" not in st.session_state:
         st.session_state.current_word = None
     
-    # Initial word fetch
+    # Initial word fetch - do silently
     if not st.session_state.words:
-        with st.spinner("Loading word list..."):
-            group_id = "1"  # TODO: Make this configurable
-            words = fetch_words(group_id)
-            if words:
-                st.session_state.words = words
-                st.success("Word list loaded successfully!")
+        group_id = "1"  # TODO: Make this configurable
+        st.session_state.words = fetch_words(group_id)
     
     # State machine
     if st.session_state.state == AppState.SETUP:
@@ -174,9 +159,12 @@ def main():
                 import random
                 word = random.choice(st.session_state.words)
                 st.session_state.current_word = word
-                st.session_state.current_sentence = generate_sentence(word)
+                with st.spinner("Generating practice sentence..."):
+                    st.session_state.current_sentence = generate_sentence(word)
                 if st.session_state.current_sentence:
                     st.session_state.state = AppState.PRACTICE
+                    # Force a rerun to show the practice state immediately
+                    st.rerun()
             else:
                 st.error("No words available. Please check API connection.")
     
