@@ -56,17 +56,9 @@ def generate_completion(prompt: str, model: str = "mistral") -> str:
         return ""
 
 def fetch_words(group_id: str) -> List[Dict]:
-    """Fetch words from the API or use default words if API is unavailable"""
-    try:
-        response = requests.get(f"http://localhost:5000/api/groups/{group_id}/raw")
-        if response.status_code == 200:
-            return response.json()
-        else:
-            st.info("Using built-in word list for practice. API connection not required.")
-            return DEFAULT_WORDS
-    except Exception as e:
-        st.info("Using built-in word list for practice. API connection not required.")
-        return DEFAULT_WORDS
+    """Get the list of practice words to use.
+    Currently uses a built-in word list for simplicity."""
+    return DEFAULT_WORDS
 
 def generate_sentence(word: Dict) -> str:
     """Generate a practice sentence using Local LLM"""

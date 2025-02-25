@@ -32,10 +32,8 @@ graph TD
     I --> A
     
     %% External Services
-    API1[Words API<br/>:5000]
     API2[Ollama API<br/>:11434]
     
-    B -.->|GET /api/groups/:id/raw| API1
     C -.->|POST /api/generate| API2
     G -.->|POST /api/generate| API2
     H -.->|POST /api/generate| API2
@@ -55,7 +53,6 @@ graph TD
     end
     
     subgraph "External APIs"
-        API1
         API2
     end
 ```
@@ -166,16 +163,6 @@ The application interacts with the following API endpoints:
 - **URL**: http://localhost:8501
 - **Description**: Main web interface for the application
 
-#### Words API (External)
-- **Port**: 5000
-- **Base URL**: http://localhost:5000
-- **Endpoints**:
-  - `GET /api/groups/:id/raw`
-    - Purpose: Fetch vocabulary words for practice
-    - Parameters: `id` - Group ID for word collection
-    - Response: JSON array of word objects
-    - Note: Currently falls back to built-in word list if unavailable
-
 #### Ollama API (Local LLM)
 - **Port**: 11434
 - **Base URL**: http://localhost:11434/api
@@ -194,3 +181,5 @@ The application interacts with the following API endpoints:
   - `GET /api/tags`
     - Purpose: Check Ollama service availability
     - Used during application startup
+
+Note: The application uses a built-in list of Japanese-English word pairs for practice. No external words API is required.
