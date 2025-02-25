@@ -21,7 +21,7 @@ The application follows a single-page design with three main states:
 
 ```mermaid
 graph TD
-    A[Web Interface<br/>Streamlit] --> B[Word Selection<br/>Python Random]
+    A[Web Interface<br/>Streamlit<br/>:8501] --> B[Word Selection<br/>Python Random]
     B --> C[Sentence Generation<br/>Ollama LLM]
     C --> D[Practice Interface]
     D --> E[Image Upload<br/>PIL]
@@ -30,6 +30,15 @@ graph TD
     G --> H[Grading System<br/>Ollama LLM]
     H --> I[Review Interface]
     I --> A
+    
+    %% External Services
+    API1[Words API<br/>:5000]
+    API2[Ollama API<br/>:11434]
+    
+    B -.->|GET /api/groups/:id/raw| API1
+    C -.->|POST /api/generate| API2
+    G -.->|POST /api/generate| API2
+    H -.->|POST /api/generate| API2
     
     subgraph "Local Processing"
         B
@@ -43,6 +52,11 @@ graph TD
         A
         D
         I
+    end
+    
+    subgraph "External APIs"
+        API1
+        API2
     end
 ```
 
@@ -142,3 +156,41 @@ This application uses local processing for all operations:
 - Translation and grading use Ollama's Mistral model
 
 No external API calls are required once the application is set up.
+
+### API Endpoints
+
+The application interacts with the following API endpoints:
+
+#### Streamlit Web Interface
+- **Port**: 8501
+- **URL**: http://localhost:8501
+- **Description**: Main web interface for the application
+
+#### Words API (External)
+- **Port**: 5000
+- **Base URL**: http://localhost:5000
+- **Endpoints**:
+  - `GET /api/groups/:id/raw`
+    - Purpose: Fetch vocabulary words for practice
+    - Parameters: `id` - Group ID for word collection
+    - Response: JSON array of word objects
+    - Note: Currently falls back to built-in word list if unavailable
+
+#### Ollama API (Local LLM)
+- **Port**: 11434
+- **Base URL**: http://localhost:11434/api
+- **Endpoints**:
+  - `POST /api/generate`
+    - Purpose: Generate text completions
+    - Used for: Sentence generation, translation, and grading
+    - Request Body: 
+      ```json
+      {
+          "model": "mistral",
+          "prompt": "prompt text",
+          "stream": false
+      }
+      ```
+  - `GET /api/tags`
+    - Purpose: Check Ollama service availability
+    - Used during application startup
