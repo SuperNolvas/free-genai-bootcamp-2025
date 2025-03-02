@@ -1,0 +1,25 @@
+# Copyright (C) 2024 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+# this file should be run in the root of the repo
+services:
+  llm-textgen:
+    build:
+      dockerfile: comps/llms/src/text-generation/Dockerfile
+    image: ${REGISTRY:-opea}/llm-textgen:${TAG:-latest}
+  llm-textgen-gaudi:
+    build:
+      dockerfile: comps/llms/src/text-generation/Dockerfile.intel_hpu
+    image: ${REGISTRY:-opea}/llm-textgen-gaudi:${TAG:-latest}
+  llm-docsum:
+    build:
+      dockerfile: comps/llms/src/doc-summarization/Dockerfile
+    image: ${REGISTRY:-opea}/llm-docsum-tgi:${TAG:-latest}
+  llm-faqgen:
+    build:
+      dockerfile: comps/llms/src/faq-generation/Dockerfile
+    image: ${REGISTRY:-opea}/llm-faqgen:${TAG:-latest}
+  llm-eval:
+    build:
+      dockerfile: comps/llms/utils/lm-eval/Dockerfile
+    image: ${REGISTRY:-opea}/llm-eval:${TAG:-latest}

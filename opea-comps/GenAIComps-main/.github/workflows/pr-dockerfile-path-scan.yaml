@@ -1,0 +1,201 @@
+# Copyright (C) 2024 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+name: Compose file and dockerfile path checking
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, ready_for_review, synchronize]
+
+# If there is a new commit, the previous jobs will be canceled
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  Dockerfile-path-change-detection-in-GenAIComps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean Up Working Directory
+        run: sudo rm -rf ${{github.workspace}}/*
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Clone GenAIExamples
+        run: |
+          cd ..
+          git clone https://github.com/opea-project/GenAIExamples
+
+      - name: Check Dockerfile Paths in Readme
+        if: always()
+        run: |
+          set -e
+          shopt -s globstar
+          cd ${{github.workspace}}
+          is_use="FALSE"
+          used_files=""
+          merged_commit=$(git log -1 --format='%H')
+          changed_files="$(git diff --name-status --diff-filter=DR ${{ github.event.pull_request.base.sha }} ${merged_commit} -- '**/Dockerfile**' | cut -f2)"
+          if [ -n "$changed_files" ]; then
+            for file in $changed_files; do
+              if grep -q "$file" ./**/*.md; then
+                is_use="TRUE"
+                used_files+="$file "
+              fi
+            done
+          fi
+
+          if [[ "$is_use" == "TRUE" ]]; then
+            echo "Warning: Changed Dockerfile paths:"
+            echo "$used_files"
+            echo "Please modify the corresponding README in GenAIComps."
+            exit 1
+          fi
+
+      - name: Check Dockerfile path included in image build yaml
+        if: always()
+        run: |
+          set -e
+          shopt -s globstar
+          no_add="FALSE"
+          cd ${{github.workspace}}
+          Dockerfiles=$(find ./comps -name '*Dockerfile*'|sed 's/^\.\///')
+          if [ -n "$Dockerfiles" ]; then
+            for Dockerfile in $Dockerfiles; do
+              service=$(echo "$Dockerfile" | awk -F '/' '{print $2}')
+              yaml_file=${{github.workspace}}/.github/workflows/docker/compose/"$service"-compose
+              if ! grep -q "$Dockerfile" "$yaml_file"*yaml; then
+                  echo "AR: Update $Dockerfile to .github/workflows/docker/compose/"$service"-compose.yaml. The yaml is used for release images build."
+                  no_add="TRUE"
+              fi
+            done
+          fi
+
+          if [[ "$no_add" == "TRUE" ]]; then
+            exit 1
+          fi
+
+      - name: Check Dockerfile inside image build yaml exist in code
+        if: always()
+        run: |
+          shopt -s globstar
+          no_exist="FALSE"
+          cd ${{github.workspace}}
+          yamls=$(find .github/workflows/docker/compose/ -name '*.yaml')
+          if [ -n "$yamls" ]; then
+            for yaml in $yamls; do
+              dockerfiles=$(grep 'dockerfile:' "$yaml"|sed 's/dockerfile: //')
+              for dockerfile in $dockerfiles; do
+                if [[ "$dockerfile" == *"comps/"* ]]; then
+                  if ! [ -e "$dockerfile" ]; then
+                    # cat "$yaml"
+                    echo "AR: The dockerfile path "$dockerfile" in "$yaml" does not exist, remove or update it."
+                    no_exist="TRUE"
+                  fi
+                fi
+              done
+            done
+          fi
+
+          if [[ "$no_exist" == "TRUE" ]]; then
+            exit 1
+          fi
+
+  Dockerfile-path-change-detection-in-GenAIExamples:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean Up Working Directory
+        run: sudo rm -rf ${{github.workspace}}/*
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Clone repo GenAIExamples
+        run: |
+          cd ..
+          git clone https://github.com/opea-project/GenAIExamples
+
+      - name: Check for changed Dockerfile paths
+        run: |
+          set -e
+          shopt -s globstar
+          cd ${{github.workspace}}
+          is_use="FALSE"
+          used_files=""
+          merged_commit=$(git log -1 --format='%H')
+          changed_files="$(git diff --name-status --diff-filter=DR ${{ github.event.pull_request.base.sha }} ${merged_commit} -- '**/Dockerfile**' | cut -f2)"
+          if [ -n "$changed_files" ]; then
+            for file in $changed_files; do
+              matching_files=$(grep -rl "$file" ../GenAIExamples/**/*.md) || true
+              if [ -n "$matching_files" ]; then
+                is_use="TRUE"
+                used_files+="$file "
+                echo "Modified Dockerfile '$file' is referenced in:"
+                echo "$matching_files"
+              else
+                echo "Modified Dockerfile '$file' is not referenced"
+              fi
+            done
+          fi
+
+          if [[ "$is_use" == "TRUE" ]]; then
+            echo "Warning: Changed Dockerfile paths:"
+            echo "$used_files"
+            echo "Please modify the corresponding README in GenAIExamples repo and ask suyue.chen@intel.com for final confirmation."
+            exit 1
+          fi
+
+  check-image-and-service-names-in-compose-yaml:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean Up Working Directory
+        run: sudo rm -rf ${{github.workspace}}/*
+
+      - name: Checkout Repo GenAIExamples
+        uses: actions/checkout@v4
+
+      - name: Check name agreement in compose.yaml
+        run: |
+          pip install ruamel.yaml
+          cd ${{github.workspace}}
+          consistency="TRUE"
+          yamls=$(find .github/workflows/docker/compose/ -name '*-compose.yaml')
+          for build_yaml in $yamls; do
+            message=$(python3 .github/workflows/scripts/check-name-agreement.py "$build_yaml")
+            if [[ "$message" != *"consistent"* ]]; then
+              consistency="FALSE"
+              echo "Inconsistent service name and image name found in file $build_yaml."
+              echo "$message"
+            fi
+          done
+          if [[ "$consistency" == "FALSE" ]]; then
+            echo "Please ensure that the service and image names are consistent in build.yaml, otherwise we cannot guarantee that your image will be published correctly."
+            exit 1
+          fi
+        shell: bash
+
+  check-duplicated-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean Up Working Directory
+        run: sudo rm -rf ${{github.workspace}}/*
+
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Check all the docker image build files
+        run: |
+          pip install PyYAML
+          cd ${{github.workspace}}
+          build_files=""
+          for f in `find .github/workflows/docker/compose/ -name '*.yaml'`; do
+              build_files="$build_files $f"
+          done
+          python3 .github/workflows/scripts/check_duplicated_image.py $build_files
+        shell: bash
