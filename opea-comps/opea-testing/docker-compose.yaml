@@ -1,0 +1,95 @@
+version: '3'
+
+services:
+  # ChatQnA Microservices (these would normally be defined in their own compose file)
+  tei-embedding-server:
+    image: opea/tei-embedding:latest
+    environment:
+      - EMBEDDING_MODEL_ID=BAAI/bge-base-en-v1.5
+    ports:
+      - "8090:80"
+  
+  retriever-server:
+    image: opea/retriever:latest
+    environment:
+      - TEI_EMBEDDING_ENDPOINT=http://tei-embedding-server:80
+      - REDIS_URL=redis://redis-vector-db:6379
+    ports:
+      - "7000:80"
+    depends_on:
+      - tei-embedding-server
+      - redis-vector-db
+
+  redis-vector-db:
+    image: redis/redis-stack:latest
+    ports:
+      - "6379:6379"
+      - "8001:8001"
+    volumes:
+      - redis-data:/data
+
+  tei-reranking-server:
+    image: opea/tei-reranking:latest
+    environment:
+      - RERANKING_MODEL_ID=BAAI/bge-reranker-base
+    ports:
+      - "8808:80"
+
+  vllm-server:
+    image: opea/vllm-service:latest
+    environment:
+      - LLM_MODEL_ID=meta-llama/Meta-Llama-3-8B-Instruct
+    ports:
+      - "9009:80"
+    volumes:
+      - vllm-data:/data
+
+  # TTS Microservice
+  speecht5-server:
+    image: opea/speecht5:latest
+    environment:
+      - TTS_MODEL_ID=microsoft/speecht5_tts
+    ports:
+      - "7055:80"
+
+  # ChatQnA Megaservice
+  chatqna-backend-server:
+    image: opea/chatqna:latest
+    environment:
+      - EMBEDDING_SERVER_HOST_IP=tei-embedding-server
+      - EMBEDDING_SERVER_PORT=80
+      - RETRIEVER_SERVICE_HOST_IP=retriever-server
+      - RETRIEVER_SERVICE_PORT=80
+      - RERANK_SERVER_HOST_IP=tei-reranking-server
+      - RERANK_SERVER_PORT=80
+      - LLM_SERVER_HOST_IP=vllm-server
+      - LLM_SERVER_PORT=80
+      - MEGA_SERVICE_PORT=80
+    ports:
+      - "8888:80"
+    depends_on:
+      - tei-embedding-server
+      - retriever-server
+      - tei-reranking-server
+      - vllm-server
+
+  # ChatQnA+TTS Megaservice
+  chatqna-tts-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.chatqna_tts
+    environment:
+      - CHATQNA_SERVICE_HOST_IP=chatqna-backend-server
+      - CHATQNA_SERVICE_PORT=80
+      - TTS_SERVICE_HOST_IP=speecht5-server
+      - TTS_SERVICE_PORT=80
+      - MEGA_SERVICE_PORT=80
+    ports:
+      - "8000:80"
+    depends_on:
+      - chatqna-backend-server
+      - speecht5-server
+
+volumes:
+  redis-data:
+  vllm-data:
