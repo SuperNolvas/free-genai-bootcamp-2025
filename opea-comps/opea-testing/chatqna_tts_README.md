@@ -12,6 +12,42 @@ The ChatQnA+TTS Megaservice orchestrates these two microservices to create an en
 3. TTS converts ChatQnA's text response to audio
 4. User receives an audio response to their original query
 
+## Development Setup
+
+### Setting Up the Python Environment with UV
+
+1. **Create a Python environment**
+
+```bash
+# Navigate to the project directory
+cd /path/to/opea-comps/opea-testing
+
+# Create a new virtual environment with UV (Python 3.10 recommended)
+uv venv
+
+# Activate the virtual environment
+source .venv/bin/activate
+```
+
+2. **Install dependencies with UV**
+
+```bash
+# Install project dependencies using UV
+uv pip install -r requirements.txt
+
+# Install GenAIComps in development mode
+cd ../GenAIComps-main
+uv pip install -e .
+cd ../opea-testing
+```
+
+3. **Optional: Install development tools**
+
+```bash
+# Install development tools
+uv pip install pytest pytest-cov black flake8
+```
+
 ## Quick Start
 
 ### 1. Set Environment Variables
@@ -58,6 +94,27 @@ The `voice` parameter is optional. Available options are:
 - `"male"` (male voice)
 
 The response will be a WAV file containing the spoken answer to your question.
+
+## Running Locally Without Docker
+
+If you want to run the service directly from your Python environment:
+
+```bash
+# Make sure your environment is activated
+source .venv/bin/activate
+
+# Set required environment variables (adjust as needed)
+export CHATQNA_SERVICE_HOST_IP=localhost
+export CHATQNA_SERVICE_PORT=8888
+export TTS_SERVICE_HOST_IP=localhost
+export TTS_SERVICE_PORT=7055
+export MEGA_SERVICE_PORT=8000
+
+# Run the megaservice
+python chatqna_tts_mega.py
+```
+
+Note: Running locally requires that you already have ChatQnA and TTS services running elsewhere.
 
 ## API Reference
 
