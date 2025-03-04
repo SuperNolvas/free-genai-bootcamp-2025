@@ -3,7 +3,9 @@
 
 import os
 
-from comps import MegaServiceEndpoint, MicroService, ServiceOrchestrator, ServiceRoleType, ServiceType
+from comps.cores.mega.micro_service import MicroService
+from comps.cores.mega.orchestrator import ServiceOrchestrator
+from comps.cores.mega.constants import ServiceRoleType, ServiceType
 from comps.cores.mega.utils import handle_message
 from comps.cores.proto.api_protocol import (
     ChatCompletionRequest,
@@ -75,7 +77,7 @@ class ChatQnATTSService:
             port=CHATQNA_SERVICE_PORT,
             endpoint="/v1/chatqna",
             use_remote_service=True,
-            service_type=ServiceType.MEGASERVICE,  # ChatQnA is itself a megaservice
+            service_type=ServiceType.GATEWAY,  # ChatQnA acts as a gateway service
         )
         
         # TTS service for audio conversion
