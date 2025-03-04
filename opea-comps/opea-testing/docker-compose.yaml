@@ -3,7 +3,7 @@ version: '3'
 services:
   # ChatQnA Microservices (these would normally be defined in their own compose file)
   tei-embedding-server:
-    image: opea/tei-embedding:latest
+    image: opea/embedding:latest
     environment:
       - EMBEDDING_MODEL_ID=BAAI/bge-base-en-v1.5
     ports:
@@ -29,14 +29,14 @@ services:
       - redis-data:/data
 
   tei-reranking-server:
-    image: opea/tei-reranking:latest
+    image: opea/reranking:latest
     environment:
       - RERANKING_MODEL_ID=BAAI/bge-reranker-base
     ports:
       - "8808:80"
 
   vllm-server:
-    image: opea/vllm-service:latest
+    image: opea/llm-textgen:latest
     environment:
       - LLM_MODEL_ID=meta-llama/Meta-Llama-3-8B-Instruct
     ports:
@@ -76,8 +76,8 @@ services:
   # ChatQnA+TTS Megaservice
   chatqna-tts-server:
     build:
-      context: .
-      dockerfile: Dockerfile.chatqna_tts
+      context: ..
+      dockerfile: opea-testing/Dockerfile.chatqna_tts
     environment:
       - CHATQNA_SERVICE_HOST_IP=chatqna-backend-server
       - CHATQNA_SERVICE_PORT=80

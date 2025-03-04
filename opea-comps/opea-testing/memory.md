@@ -270,3 +270,60 @@ free-genai-bootcamp-2025/
 ```
 
 These updates make the project more accessible for developers who prefer using modern Python tooling like UV for dependency management, rather than relying solely on Docker for development.
+
+## Recent Progress (2025-06-03)
+We've successfully deployed the ChatQnA+TTS Megaservice with the following steps:
+
+1. ✅ **Environment Variables Setup**
+   - Set up the required environment variables for all services:
+     ```bash
+     export host_ip=192.168.1.230
+     export CHATQNA_SERVICE_HOST_IP=${host_ip}
+     export CHATQNA_SERVICE_PORT=8888
+     export TTS_SERVICE_HOST_IP=${host_ip}
+     export TTS_SERVICE_PORT=7055
+     export MEGA_SERVICE_PORT=8000
+     ```
+   - Made these environment variables persistent by adding them to the virtual environment's activation script:
+     ```bash
+     cat << 'EOF' >> .venv/bin/activate
+     
+     # Environment variables for ChatQnA and TTS services
+     export host_ip=192.168.1.230
+     export CHATQNA_SERVICE_HOST_IP=${host_ip}
+     export CHATQNA_SERVICE_PORT=8888
+     export TTS_SERVICE_HOST_IP=${host_ip}
+     export TTS_SERVICE_PORT=7055
+     export MEGA_SERVICE_PORT=8000
+     EOF
+     ```
+   - Updated the README with instructions for making environment variables persistent in the UV virtual environment
+
+2. ✅ **Docker Image Resolution**
+   - Fixed issues with Docker image names in docker-compose.yaml:
+     - Changed `opea/tei-embedding:latest` → `opea/embedding:latest`
+     - Changed `opea/tei-reranking:latest` → `opea/reranking:latest`
+     - Changed `opea/vllm-service:latest` → `opea/llm-textgen:latest`
+
+3. ✅ **Build Context Resolution**
+   - Fixed the Dockerfile.chatqna_tts build context issue:
+     - Updated docker-compose.yaml to use parent directory as build context
+     - Modified paths in Dockerfile.chatqna_tts to reference files correctly
+     - Added git to the Dockerfile to resolve dependency installation issues
+
+4. ✅ **Service Deployment**
+   - Successfully deployed all services using docker compose:
+     ```bash
+     docker compose up -d
+     ```
+   - Verified all containers are running with correct port mappings:
+     - chatqna-backend-server: 8888->80
+     - redis-vector-db: 6379->6379, 8001->8001
+     - retriever-server: 7000->80
+     - speecht5-server: 7055->80
+     - tei-embedding-server: 8090->80
+     - tei-reranking-server: 8808->80
+     - vllm-server: 9009->80
+     - chatqna-tts-server: 8000->80
+
+The ChatQnA+TTS Megaservice is now fully deployed and ready for testing. The next step is to test the service with a sample query to verify end-to-end functionality.

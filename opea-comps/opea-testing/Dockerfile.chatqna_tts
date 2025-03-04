@@ -6,6 +6,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     python3-dev \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install GenAIComps
@@ -13,7 +14,7 @@ COPY GenAIComps-main /tmp/GenAIComps
 RUN cd /tmp/GenAIComps && pip install -e .
 
 # Copy service code
-COPY chatqna_tts_mega.py /app/
+COPY opea-testing/chatqna_tts_mega.py /app/
 
 # Install dependencies
 RUN pip install --no-cache-dir fastapi uvicorn gunicorn
