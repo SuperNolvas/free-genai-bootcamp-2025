@@ -161,14 +161,41 @@ The response is a binary audio file (WAV format) containing the spoken answer to
 ## Deployment
 
 The docker-compose.yaml file includes all necessary services:
-- tei-embedding-server: For generating embeddings
-- retriever-server: For retrieving relevant documents
-- redis-vector-db: Vector database for document storage
-- tei-reranking-server: For reranking retrieved results
-- vllm-server: LLM service for generating responses
-- speecht5-server: TTS service for converting text to speech
-- chatqna-backend-server: The ChatQnA megaservice
-- chatqna-tts-server: The ChatQnA+TTS megaservice
+- embedding-server (opea/embedding:latest): For generating embeddings
+- retriever-server (opea/retriever:latest): For retrieving relevant documents
+- redis-vector-db (redis/redis-stack:latest): Vector database for document storage
+- reranking-server (opea/reranking:latest): For reranking retrieved results
+- vllm-server (opea/llm-textgen:latest): LLM service for generating responses
+- speecht5-server (opea/speecht5:latest): TTS service for converting text to speech
+- chatqna-backend-server (opea/chatqna:latest): The ChatQnA megaservice
+- chatqna-tts-server (custom local build): The ChatQnA+TTS megaservice
+
+Note: The chatqna-tts-server is built locally from the Dockerfile.chatqna_tts in this repository. It orchestrates the interaction between ChatQnA and TTS services to provide an end-to-end text-to-speech question answering system.
+
+### Docker Image Details
+Most services use pre-built images from the OPEA project on Docker Hub (opea/*). However, the chatqna-tts-server is a custom service that we build locally. The build process:
+1. Uses Python 3.10 slim base image
+2. Installs required system packages (gcc, python3-dev, git)
+3. Installs the GenAIComps package from the local repository
+4. Sets up the service orchestration code (chatqna_tts_mega.py)
+
+### Troubleshooting
+Common issues and solutions:
+
+1. **Service Connection Issues**
+   - Verify that all environment variables are set correctly
+   - Ensure host_ip is accessible from within Docker containers
+   - Check that all required ports are available and not blocked by firewall
+
+2. **Audio Output Issues**
+   - If response.wav is too small (< 1KB), check the service logs for errors
+   - Verify that both ChatQnA and TTS services are responding correctly
+   - Ensure the voice parameter is set to either "default" or "male"
+
+3. **Docker Build Issues**
+   - If building chatqna-tts-server fails, ensure you're in the correct directory
+   - Verify that GenAIComps-main is available in the build context
+   - Check that all required dependencies are listed in requirements.txt
 
 ## Architecture Diagram
 

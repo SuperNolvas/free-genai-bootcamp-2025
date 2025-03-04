@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
+import asyncio
+from typing import Dict, Any, Optional
+import aiohttp
 
 from comps.cores.mega.micro_service import MicroService
 from comps.cores.mega.orchestrator import ServiceOrchestrator
@@ -22,51 +25,133 @@ from fastapi.responses import StreamingResponse
 MEGA_SERVICE_PORT = int(os.getenv("MEGA_SERVICE_PORT", 8000))
 
 # ChatQnA service configuration
-CHATQNA_SERVICE_HOST_IP = os.getenv("CHATQNA_SERVICE_HOST_IP", "0.0.0.0")
-CHATQNA_SERVICE_PORT = int(os.getenv("CHATQNA_SERVICE_PORT", 8888))
+CHATQNA_SERVICE_HOST_IP = os.getenv("CHATQNA_SERVICE_HOST_IP", "chatqna-backend-server")
+CHATQNA_SERVICE_PORT = int(os.getenv("CHATQNA_SERVICE_PORT", 80))
 
 # TTS service configuration
-TTS_SERVICE_HOST_IP = os.getenv("TTS_SERVICE_HOST_IP", "0.0.0.0")
-TTS_SERVICE_PORT = int(os.getenv("TTS_SERVICE_PORT", 7055))
+TTS_SERVICE_HOST_IP = os.getenv("TTS_SERVICE_HOST_IP", "speecht5-server")
+TTS_SERVICE_PORT = int(os.getenv("TTS_SERVICE_PORT", 7055))  # Updated to match actual speecht5 server port
 
 # Define input/output alignment functions
-def align_inputs(source_output, target_input):
+def align_inputs(inputs: Dict[str, Any], target_node: str, 
+                runtime_graph: Optional[Any] = None, 
+                llm_parameters_dict: Optional[Dict[str, Any]] = None,
+                **kwargs) -> Dict[str, Any]:
     """Align outputs from source to inputs for target.
     
-    This function handles the data flow between microservices.
-    """
-    if source_output is None:
-        return {}
-        
-    # When flowing from ChatQnA to TTS, we need to extract the text response
-    if "choices" in source_output:
-        # Extract text from ChatQnA response to send to TTS
-        if len(source_output["choices"]) > 0:
-            text = source_output["choices"][0]["message"]["content"]
-            return {"text": text}
+    Args:
+        inputs: Dictionary containing input data or response from previous service
+        target_node: Name of the target service node
+        runtime_graph: Optional runtime graph object
+        llm_parameters_dict: Optional LLM parameters
+        **kwargs: Additional keyword arguments including 'voice'
     
-    return source_output
+    Returns:
+        Dict[str, Any]: Aligned inputs for the target service
+    """
+    if inputs is None or not isinstance(inputs, dict):
+        return {}
 
-def align_outputs(output):
-    """Standardize the output format from microservices."""
+    # Handle initial input to ChatQnA service
+    if "messages" in inputs:
+        return inputs
+        
+    # When flowing from ChatQnA to TTS, extract the text response
+    if "choices" in inputs:
+        if len(inputs["choices"]) > 0:
+            text = inputs["choices"][0]["message"]["content"]
+            # Include voice parameter if provided
+            result = {"text": text}
+            if "voice" in kwargs:
+                result["voice"] = kwargs["voice"]
+            return result
+    
+    return inputs
+
+def align_outputs(output: Dict[str, Any], cur_node: str = None,
+                 inputs: Optional[Dict[str, Any]] = None,
+                 runtime_graph: Optional[Any] = None,
+                 llm_parameters_dict: Optional[Dict[str, Any]] = None,
+                 **kwargs) -> Dict[str, Any]:
+    """Standardize the output format from microservices.
+    
+    Args:
+        output: Output from the service to be aligned
+        cur_node: Current node in service graph
+        inputs: Original inputs
+        runtime_graph: Runtime graph object
+        llm_parameters_dict: LLM parameters
+        **kwargs: Additional keyword arguments including 'voice'
+    
+    Returns:
+        Dict[str, Any]: Standardized output
+    """
     return output
 
 
 class ChatQnATTSService:
-    """Megaservice that combines ChatQnA for text processing and TTS for audio conversion."""
-    
     def __init__(self, host="0.0.0.0", port=8000):
         self.host = host
         self.port = port
         
-        # Setup the service orchestrator with alignment functions
-        ServiceOrchestrator.align_inputs = align_inputs
-        ServiceOrchestrator.align_outputs = align_outputs
+        # Setup the service orchestrator
         self.megaservice = ServiceOrchestrator()
+        # Set alignment functions on the instance
+        self.megaservice.align_inputs = align_inputs
+        self.megaservice.align_outputs = align_outputs
         
         # Define a unique endpoint for this megaservice
         self.endpoint = "/v1/chatqna-tts"
     
+    async def wait_for_service(self, name: str, host: str, port: int, max_retries: int = 10, delay: int = 5):
+        """Wait for a service to become available.
+        
+        Args:
+            name: Service name for logging
+            host: Service host
+            port: Service port
+            max_retries: Maximum number of retry attempts
+            delay: Delay between retries in seconds
+        """
+        print(f"[INFO] Checking {name} service at {host}:{port}")
+        endpoints = {
+            "ChatQnA": "/v1/chat/completions",
+            "TTS": "/v1/audio/speech"
+        }
+        health_endpoint = endpoints.get(name, "/healthz")
+        
+        for attempt in range(max_retries):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    url = f"http://{host}:{port}{health_endpoint}"
+                    print(f"[INFO] Attempting to connect to {url}")
+                    
+                    # Use POST for TTS service with proper payload, GET for others
+                    if name == "TTS":
+                        # Send properly formatted payload for TTS using the OpenAI-compatible format
+                        payload = {
+                            "input": "test",
+                            "voice": "default",
+                            "response_format": "mp3"
+                        }
+                        async with session.post(url, json=payload) as response:
+                            if response.status == 200:
+                                print(f"[INFO] Successfully connected to {name}")
+                                return True
+                    else:
+                        async with session.get(url) as response:
+                            if response.status in [200, 404]:  # 404 is ok for POST-only endpoints
+                                print(f"[INFO] Successfully connected to {name}")
+                                return True
+            except Exception as e:
+                print(f"[WARN] Attempt {attempt + 1}/{max_retries} to connect to {name} failed: {str(e)}")
+                if attempt < max_retries - 1:
+                    print(f"[INFO] Waiting {delay} seconds before retry...")
+                    await asyncio.sleep(delay)
+                continue
+        print(f"[ERROR] Failed to connect to {name} service after {max_retries} attempts")
+        return False
+
     def add_remote_service(self):
         """Connect to the microservices and define the flow between them."""
         
@@ -75,9 +160,9 @@ class ChatQnATTSService:
             name="chatqna",
             host=CHATQNA_SERVICE_HOST_IP,
             port=CHATQNA_SERVICE_PORT,
-            endpoint="/v1/chatqna",
+            endpoint="/v1/chat/completions",  # Updated to standard ChatGPT-style endpoint
             use_remote_service=True,
-            service_type=ServiceType.GATEWAY,  # ChatQnA acts as a gateway service
+            service_type=ServiceType.GATEWAY,
         )
         
         # TTS service for audio conversion
@@ -85,7 +170,7 @@ class ChatQnATTSService:
             name="tts",
             host=TTS_SERVICE_HOST_IP,
             port=TTS_SERVICE_PORT,
-            endpoint="/v1/tts",
+            endpoint="/v1/audio/speech",  # Updated to standard TTS endpoint
             use_remote_service=True,
             service_type=ServiceType.TTS,
         )
@@ -101,9 +186,17 @@ class ChatQnATTSService:
         
         data = await request.json()
         
-        # Parse the incoming request as a ChatCompletion request
-        chat_request = ChatCompletionRequest.parse_obj(data)
-        prompt = handle_message(chat_request.messages)
+        # Format messages as a list with role and content
+        if isinstance(data["messages"], str):
+            messages = [{"role": "user", "content": data["messages"]}]
+        else:
+            messages = data["messages"]
+        
+        # Parse the incoming request using model_validate
+        chat_request = ChatCompletionRequest.model_validate({
+            **data,
+            "messages": messages
+        })
         
         # Configure parameters for the LLM in ChatQnA service
         parameters = LLMParams(
@@ -120,9 +213,9 @@ class ChatQnATTSService:
         
         # Schedule the execution of the service pipeline
         result_dict, runtime_graph = await self.megaservice.schedule(
-            initial_inputs={"messages": prompt}, 
+            initial_inputs={"messages": messages},  # Pass formatted messages directly
             llm_parameters=parameters,
-            voice=data.get("voice", "default")  # Optional voice parameter
+            voice=data.get("voice", "default")
         )
         
         # Extract the final result from the TTS service
@@ -131,28 +224,49 @@ class ChatQnATTSService:
         
         return audio_response
     
-    def start(self):
-        """Start the megaservice."""
+    async def start(self):
+        """Start the megaservice with service health checks."""
         
-        self.service = MicroService(
-            self.__class__.__name__,
-            service_role=ServiceRoleType.MEGASERVICE,
-            host=self.host,
-            port=self.port,
-            endpoint=self.endpoint,
-            input_datatype=ChatCompletionRequest,
-            output_datatype=ChatCompletionResponse,
+        # Wait for dependent services
+        chatqna_ready = await self.wait_for_service(
+            "ChatQnA", CHATQNA_SERVICE_HOST_IP, CHATQNA_SERVICE_PORT
+        )
+        tts_ready = await self.wait_for_service(
+            "TTS", TTS_SERVICE_HOST_IP, TTS_SERVICE_PORT
+        )
+        
+        if not (chatqna_ready and tts_ready):
+            raise RuntimeError("Required services are not available")
+        
+        # Initialize the FastAPI app directly
+        from fastapi import FastAPI
+        app = FastAPI()
+        
+        # Configure CORS
+        from fastapi.middleware.cors import CORSMiddleware
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
         )
         
         # Add the route to handle requests
-        self.service.add_route(self.endpoint, self.handle_request, methods=["POST"])
+        app.post(self.endpoint)(self.handle_request)
         
-        # Start the service
-        self.service.start()
-
+        return app
 
 if __name__ == "__main__":
-    # Create and start the ChatQnA+TTS megaservice
-    chatqna_tts = ChatQnATTSService(port=MEGA_SERVICE_PORT)
+    import uvicorn
+    import asyncio
+    
+    # Create the ChatQnA+TTS megaservice
+    chatqna_tts = ChatQnATTSService(host="0.0.0.0", port=MEGA_SERVICE_PORT)
     chatqna_tts.add_remote_service()
-    chatqna_tts.start()
+    
+    # Get the FastAPI app
+    app = asyncio.run(chatqna_tts.start())
+    
+    # Run the FastAPI app with uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=MEGA_SERVICE_PORT)
