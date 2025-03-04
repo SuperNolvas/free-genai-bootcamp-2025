@@ -103,7 +103,7 @@ class ChatQnATTSService:
         # Define a unique endpoint for this megaservice
         self.endpoint = "/v1/chatqna-tts"
     
-    async def wait_for_service(self, name: str, host: str, port: int, max_retries: int = 10, delay: int = 5):
+    async def wait_for_service(self, name: str, host: str, port: int, max_retries: int = 10, delay: int = 10):
         """Wait for a service to become available."""
         print(f"[INFO] Checking {name} service at {host}:{port}")
         endpoints = {
