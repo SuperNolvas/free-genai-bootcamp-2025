@@ -26,7 +26,7 @@ MEGA_SERVICE_PORT = int(os.getenv("MEGA_SERVICE_PORT", 8000))
 
 # ChatQnA service configuration
 CHATQNA_SERVICE_HOST_IP = os.getenv("CHATQNA_SERVICE_HOST_IP", "chatqna-backend-server")
-CHATQNA_SERVICE_PORT = int(os.getenv("CHATQNA_SERVICE_PORT", 80))
+CHATQNA_SERVICE_PORT = int(os.getenv("CHATQNA_SERVICE_PORT", 80))  # Updated to use internal port 80
 
 # TTS service configuration
 TTS_SERVICE_HOST_IP = os.getenv("TTS_SERVICE_HOST_IP", "speecht5-server")
@@ -104,18 +104,10 @@ class ChatQnATTSService:
         self.endpoint = "/v1/chatqna-tts"
     
     async def wait_for_service(self, name: str, host: str, port: int, max_retries: int = 10, delay: int = 5):
-        """Wait for a service to become available.
-        
-        Args:
-            name: Service name for logging
-            host: Service host
-            port: Service port
-            max_retries: Maximum number of retry attempts
-            delay: Delay between retries in seconds
-        """
+        """Wait for a service to become available."""
         print(f"[INFO] Checking {name} service at {host}:{port}")
         endpoints = {
-            "ChatQnA": "/v1/chat/completions",
+            "ChatQnA": "/v1/chatqna",  # Updated to correct endpoint
             "TTS": "/v1/audio/speech"
         }
         health_endpoint = endpoints.get(name, "/healthz")
@@ -126,9 +118,7 @@ class ChatQnATTSService:
                     url = f"http://{host}:{port}{health_endpoint}"
                     print(f"[INFO] Attempting to connect to {url}")
                     
-                    # Use POST for TTS service with proper payload, GET for others
                     if name == "TTS":
-                        # Send properly formatted payload for TTS using the OpenAI-compatible format
                         payload = {
                             "input": "test",
                             "voice": "default",
@@ -139,7 +129,11 @@ class ChatQnATTSService:
                                 print(f"[INFO] Successfully connected to {name}")
                                 return True
                     else:
-                        async with session.get(url) as response:
+                        # For ChatQnA service, send a test query
+                        payload = {
+                            "messages": "test"
+                        }
+                        async with session.post(url, json=payload) as response:
                             if response.status in [200, 404]:  # 404 is ok for POST-only endpoints
                                 print(f"[INFO] Successfully connected to {name}")
                                 return True
@@ -160,7 +154,7 @@ class ChatQnATTSService:
             name="chatqna",
             host=CHATQNA_SERVICE_HOST_IP,
             port=CHATQNA_SERVICE_PORT,
-            endpoint="/v1/chat/completions",  # Updated to standard ChatGPT-style endpoint
+            endpoint="/v1/chatqna",  # Updated to correct endpoint
             use_remote_service=True,
             service_type=ServiceType.GATEWAY,
         )
@@ -170,7 +164,7 @@ class ChatQnATTSService:
             name="tts",
             host=TTS_SERVICE_HOST_IP,
             port=TTS_SERVICE_PORT,
-            endpoint="/v1/audio/speech",  # Updated to standard TTS endpoint
+            endpoint="/v1/audio/speech",
             use_remote_service=True,
             service_type=ServiceType.TTS,
         )
