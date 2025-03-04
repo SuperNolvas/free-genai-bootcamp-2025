@@ -67,6 +67,27 @@ export TTS_SERVICE_PORT=7055
 export MEGA_SERVICE_PORT=8000
 ```
 
+To make these environment variables persistent in your UV virtual environment, add them to the virtual environment's activation script:
+
+```bash
+cat << 'EOF' >> .venv/bin/activate
+
+# Environment variables for ChatQnA and TTS services
+export host_ip=<your External Public IP>  # Replace with your actual IP
+export CHATQNA_SERVICE_HOST_IP=${host_ip}
+export CHATQNA_SERVICE_PORT=8888
+export TTS_SERVICE_HOST_IP=${host_ip}
+export TTS_SERVICE_PORT=7055
+export MEGA_SERVICE_PORT=8000
+EOF
+```
+
+After adding these variables, deactivate and reactivate your virtual environment to apply the changes:
+```bash
+deactivate
+source .venv/bin/activate
+```
+
 ### 2. Run with Docker Compose
 
 ```bash
@@ -153,10 +174,10 @@ The docker-compose.yaml file includes all necessary services:
 
 ```
 ┌─────────────┐         ┌──────────────────────────────────────┐         ┌─────────────┐
-│  User Input │────────▶│            ChatQnA Service           │────────▶│  TTS Service │
-│   (Text)    │         │                                      │         │  (SpeechT5)  │
+│  User Input │────────▶│            ChatQnA Service           │────────▶│  TTS Service│
+│   (Text)    │         │                                      │         │  (SpeechT5) │
 └─────────────┘         │ ┌─────────┐ ┌────────┐ ┌─────────┐   │         └──────┬──────┘
-                        │ │Embedding│ │Retriever│ │Reranking│   │                │
+                        │ │Embedding│ │Retriever│ │Reranking│  │                │
                         │ └────┬────┘ └───┬────┘ └────┬────┘   │                │
                         │      │          │           │        │                │
                         │      └──────────┼───────────┘        │                │
