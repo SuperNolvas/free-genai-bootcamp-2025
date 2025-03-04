@@ -137,6 +137,36 @@ The implementation of the ChatQnA+TTS Megaservice has been completed with the fo
 
 The ChatQnA+TTS Megaservice demonstrates the power of the GenAIComps framework for creating complex AI applications through service orchestration. By connecting the ChatQnA service (which itself is a megaservice combining embedding, retrieval, reranking, and LLM components) with the TTS service, we've created an end-to-end pipeline that can convert text queries into spoken answers, providing a more natural and accessible user experience.
 
+### 5. Megaservice Hierarchy Explanation
+
+It's important to note that our implementation involves a two-level megaservice hierarchy:
+
+1. **ChatQnA** itself is a Megaservice that orchestrates several microservices:
+   - Embedding service (for creating vector representations)
+   - Retriever service (for fetching relevant documents)
+   - Reranking service (for prioritizing the most relevant results)
+   - LLM service (for generating natural language responses)
+
+2. **ChatQnA+TTS** is our higher-level Megaservice that orchestrates:
+   - The ChatQnA Megaservice (which itself orchestrates multiple microservices)
+   - The TTS (Text-to-Speech) microservice
+
+This hierarchical architecture is explicitly acknowledged in our code:
+
+```python
+# ChatQnA service for text processing
+chatqna = MicroService(
+    name="chatqna",
+    host=CHATQNA_SERVICE_HOST_IP,
+    port=CHATQNA_SERVICE_PORT,
+    endpoint="/v1/chatqna",
+    use_remote_service=True,
+    service_type=ServiceType.MEGASERVICE,  # ChatQnA is itself a megaservice
+)
+```
+
+This demonstrates a powerful pattern in the GenAIComps framework: Megaservices can orchestrate not just microservices but also other Megaservices, allowing for complex, multi-level workflows while maintaining modularity.
+
 ## Project Structure
 
 Our implementation has been organized into a dedicated folder called `opea-testing` with the following structure:
