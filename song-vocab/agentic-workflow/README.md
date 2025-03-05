@@ -65,13 +65,20 @@ export AWS_REGION=<your-region>
 uvicorn src.main:app --reload
 ```
 
-2. Send a POST request to `/api/agent` with song details:
+2. Access the API through either:
 
-```json
-{
-  "message_request": "Song Title by Artist Name"
-}
-```
+   a. Browser-friendly GET request:
+   ```
+   http://127.0.0.1:8000/api/agent/{song}/{artist}
+   ```
+   Example: http://127.0.0.1:8000/api/agent/Yesterday/Beatles
+   
+   b. POST request to `/api/agent` with JSON body:
+   ```json
+   {
+     "message_request": "Song Title by Artist Name"
+   }
+   ```
 
 The response will include:
 - Original lyrics processed by Amazon Bedrock for improved formatting

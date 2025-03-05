@@ -43,3 +43,32 @@ async def get_lyrics(request: MessageRequest):
         return {"lyrics": processed_lyrics, "vocabulary": vocabulary}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/agent/{song}/{artist}")
+async def get_lyrics_by_url(song: str, artist: str):
+    try:
+        message = f"{song} by {artist}"
+        
+        # Search for lyrics
+        search_results = search_lyrics(song, artist)
+        if not search_results:
+            raise HTTPException(status_code=404, detail="No lyrics found.")
+
+        # Get page content and extract lyrics
+        page_content = get_page_content(search_results[0])
+        if not page_content:
+            raise HTTPException(status_code=404, detail="Could not fetch lyrics content.")
+            
+        lyrics = extract_lyrics_from_html(page_content)
+        if not lyrics:
+            raise HTTPException(status_code=404, detail="Could not extract lyrics from page.")
+
+        # Process lyrics with Bedrock
+        processed_lyrics = process_with_bedrock(lyrics)
+        
+        # Extract vocabulary from processed lyrics
+        vocabulary = extract_vocabulary(processed_lyrics)
+
+        return {"lyrics": processed_lyrics, "vocabulary": vocabulary}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
