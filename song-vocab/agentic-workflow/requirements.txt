@@ -1,0 +1,8 @@
+FastAPI
+Ollama
+mistral
+Instructor
+sqlite3
+duckduckgo-search
+requests
+pydantic
