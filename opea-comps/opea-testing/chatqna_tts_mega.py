@@ -86,6 +86,16 @@ def align_outputs(output: Dict[str, Any], cur_node: str = None,
     Returns:
         Dict[str, Any]: Standardized output
     """
+    if output is None or not isinstance(output, dict):
+        return {}
+    
+    # Handle output from ChatQnA service
+    if "choices" in output:
+        if len(output["choices"]) > 0:
+            message = output["choices"][0]["message"]
+            if isinstance(message, dict) and "content" in message:
+                return {"text": message["content"]}
+    
     return output
 
 
@@ -234,6 +244,9 @@ class ChatQnATTSService:
             last_node = runtime_graph.all_leaves()[-1]
             print(f"[DEBUG] Last node: {last_node}, available keys: {result_dict.keys()}")
             audio_response = result_dict[last_node]
+            
+            # Log the response from the ChatQnA service
+            print(f"[DEBUG] Response from ChatQnA service: {audio_response}")
             
             # Return the audio as a streaming response
             return StreamingResponse(content=audio_response, media_type="audio/wav")
