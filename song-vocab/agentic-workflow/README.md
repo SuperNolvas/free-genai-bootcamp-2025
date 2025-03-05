@@ -1,6 +1,28 @@
 # Agentic Workflow
 
-This project is designed to create an agentic workflow that retrieves song lyrics from the internet, processes them using Amazon Bedrock, extracts vocabulary, and stores it in a local database. The application utilizes FastAPI for the web framework and employs SQLite3 for database management.
+This project is designed to create an agentic workflow that retrieves song lyrics from various lyrics websites, processes them using Amazon Bedrock Nova Micro model, and extracts vocabulary. The application utilizes FastAPI for the web framework and implements robust lyrics validation and cleaning.
+
+## Data Flow
+
+```mermaid
+flowchart TD
+    A(["User Request"]) --> B["FastAPI Endpoint"]
+    B --> C{"Try Direct URLs"}
+    C -->|"Success"| E["Get Lyrics Content"]
+    C -->|"Fail"| D["DuckDuckGo Search"]
+    D --> E
+    E --> F{"Validate Lyrics"}
+    F -->|"Invalid"| G["Try Next Source"]
+    G --> E
+    F -->|"Valid"| H["Clean Lyrics"]
+    H --> I["Amazon Bedrock"]
+    I --> J["Extract Vocabulary"]
+    J --> K(["Return Response"])
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style K fill:#9ff,stroke:#333,stroke-width:2px
+    style I fill:#ff9,stroke:#333,stroke-width:2px
+```
 
 ## Project Structure
 
@@ -25,7 +47,7 @@ agentic-workflow
 ## Prerequisites
 
 - Python 3.8+
-- AWS Account with Bedrock access
+- AWS Account with Bedrock access (Nova Micro model)
 - AWS credentials configured
 - uv package manager (`pip install uv`)
 
@@ -71,7 +93,10 @@ uvicorn src.main:app --reload
    ```
    http://127.0.0.1:8000/api/agent/{song}/{artist}
    ```
-   Example: http://127.0.0.1:8000/api/agent/Yesterday/Beatles
+   Examples:
+   - http://127.0.0.1:8000/api/agent/Yesterday/Beatles
+   - http://127.0.0.1:8000/api/agent/Satisfaction/Rolling%20Stones
+   - http://127.0.0.1:8000/api/agent/Bohemian%20Rhapsody/Queen
    
    b. POST request to `/api/agent` with JSON body:
    ```json
@@ -81,23 +106,53 @@ uvicorn src.main:app --reload
    ```
 
 The response will include:
-- Original lyrics processed by Amazon Bedrock for improved formatting
+- Cleaned and formatted song lyrics
 - List of unique vocabulary words extracted from the lyrics
+- Optional note if lyrics are shown without Bedrock processing
 
 Example response:
 ```json
 {
-  "lyrics": "Processed and formatted lyrics...",
-  "vocabulary": ["word1", "word2", "word3"]
+  "lyrics": "Yesterday\nAll my troubles seemed so far away\nNow it looks as though they're here to stay\nOh, I believe in yesterday...",
+  "vocabulary": ["all", "away", "believe", "far", "here", "looks", "my", "now", "oh", "seemed", "stay", "they", "though", "troubles", "yesterday"],
+  "note": "Original lyrics shown"
 }
 ```
 
 ## Features
 
-- Web-based lyrics search using DuckDuckGo
-- Lyrics processing and enhancement using Amazon Bedrock
+- Web-based lyrics search using DuckDuckGo with fallback options
+- Direct URL construction for popular lyrics websites (Genius, AZLyrics, Lyrics.com)
+- Robust lyrics validation and cleaning
+- Lyrics processing using Amazon Bedrock Nova Micro model
 - Vocabulary extraction and analysis
 - RESTful API with FastAPI
+- Support for well-known songs with alternate titles
+- Language-agnostic lyrics cleaning
+
+## Supported Lyrics Sources
+
+- Genius Lyrics
+- AZLyrics
+- Lyrics.com
+- Additional sources through DuckDuckGo search
+
+## Error Handling
+
+The API implements various error handling mechanisms:
+- 404 for lyrics not found
+- 429 for rate limiting
+- Automatic retries with exponential backoff
+- Fallback to alternative lyrics sources
+- Validation to ensure correct song/artist match
+
+## Validation Features
+
+- Title and artist matching
+- Song-specific phrase validation
+- Length and structure validation
+- Metadata cleaning
+- Multiple language support
 
 ## Contributing
 
