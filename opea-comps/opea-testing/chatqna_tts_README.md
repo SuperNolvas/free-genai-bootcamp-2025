@@ -97,16 +97,52 @@ The response will be a WAV file containing the spoken answer to your question.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| messages | string or array | The query to send to ChatQnA |
-| max_tokens | integer | (Optional) Maximum number of tokens in the response |
-| temperature | float | (Optional) Controls randomness of output |
-| top_k | integer | (Optional) Number of top tokens to consider |
-| top_p | float | (Optional) Cumulative probability threshold |
-| voice | string | (Optional) Voice type: "default" or "male" |
+| messages | string or array | The query to send to ChatQnA. Can be a single string or an array of message objects with role and content |
+| question | string | Alternative to messages - the question to ask (with optional context) |
+| context | string | Optional context to provide with the question parameter |
+| max_tokens | integer | (Optional) Maximum number of tokens in the response. Default: 1024 |
+| temperature | float | (Optional) Controls randomness of output. Default: 0.01 |
+| top_k | integer | (Optional) Number of top tokens to consider. Default: 10 |
+| top_p | float | (Optional) Cumulative probability threshold. Default: 0.95 |
+| frequency_penalty | float | (Optional) Penalize frequent tokens. Default: 0.0 |
+| presence_penalty | float | (Optional) Penalize repeated information. Default: 0.0 |
+| repetition_penalty | float | (Optional) Penalize token repetition. Default: 1.03 |
+| voice | string | (Optional) Voice type: "default" (female) or "male". Default: "default" |
+| chat_template | string | (Optional) Custom chat template for formatting messages |
 
 ### Response
 
 The response is a binary audio file (WAV format) containing the spoken answer to the query.
+
+### Example Request Formats
+
+1. Using messages (string):
+```json
+{
+    "messages": "What is the revenue of Nike in 2023?",
+    "max_tokens": 128,
+    "voice": "default"
+}
+```
+
+2. Using question and context:
+```json
+{
+    "question": "What is the revenue?",
+    "context": "Nike's financial report for 2023",
+    "voice": "male"
+}
+```
+
+3. Using messages (array):
+```json
+{
+    "messages": [
+        {"role": "user", "content": "What was Nike's revenue in 2023?"}
+    ],
+    "voice": "default"
+}
+```
 
 ## Deployment
 
