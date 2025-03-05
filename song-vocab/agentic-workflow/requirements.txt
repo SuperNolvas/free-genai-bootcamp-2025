@@ -1,8 +1,7 @@
 FastAPI
-Ollama
-mistral
-Instructor
-sqlite3
+uvicorn
+boto3
 duckduckgo-search
 requests
 pydantic
+beautifulsoup4
