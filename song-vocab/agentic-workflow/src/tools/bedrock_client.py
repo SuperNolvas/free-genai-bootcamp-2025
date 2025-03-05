@@ -12,15 +12,31 @@ def get_bedrock_client():
     )
 
 def process_with_bedrock(text: str) -> str:
-    """Process text using Amazon Bedrock's model."""
+    """Process text using Amazon Bedrock's Nova Micro model."""
     client = get_bedrock_client()
     
-    # Prepare the prompt
+    # Create a more straightforward prompt for the model
+    prompt = (
+        "Task: Format the following song lyrics clearly, preserving line breaks and structure.\n\n"
+        "Instructions:\n"
+        "1. Remove any unnecessary metadata or headers\n"
+        "2. Keep verse and chorus structure\n"
+        "3. Preserve line breaks\n"
+        "4. Format for readability\n\n"
+        "Lyrics to format:\n\n"
+        f"{text}\n\n"
+        "Formatted lyrics:"
+    )
+    
+    # Prepare the request body for Nova Micro
     body = {
-        "prompt": f"\n\nHuman: Analyze these song lyrics and improve their formatting:\n{text}\n\nAssistant:",
-        "max_tokens": 2000,
-        "temperature": 0.7,
-        "stop_sequences": ["\n\nHuman:"]
+        "inputText": prompt,
+        "textGenerationConfig": {
+            "maxTokenCount": 2000,
+            "temperature": 0.1,  # Lower temperature for more consistent formatting
+            "topP": 1.0,
+            "stopSequences": []
+        }
     }
     
     try:
@@ -29,7 +45,15 @@ def process_with_bedrock(text: str) -> str:
             body=json.dumps(body)
         )
         response_body = json.loads(response['body'].read())
-        return response_body.get('completion', text)
+        
+        # Handle the response and extract the formatted lyrics
+        output = response_body.get('results', [{"outputText": text}])[0].get('outputText', text)
+        
+        # If we get an error message, return the original text
+        if "unable to respond" in output.lower() or "sorry" in output.lower():
+            return text
+            
+        return output.strip()
     except Exception as e:
         print(f"Error processing with Bedrock: {e}")
         return text

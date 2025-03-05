@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from ..tools.extract_vocabulary import extract_vocabulary
-from ..tools.get_page_content import get_page_content, extract_lyrics_from_html
+from ..tools.get_page_content import get_page_content, extract_lyrics_from_html, get_lyrics_with_fallback
 from ..tools.search_web import search_lyrics
 from ..tools.bedrock_client import process_with_bedrock
 
@@ -13,62 +13,61 @@ class MessageRequest(BaseModel):
 @router.post("/api/agent")
 async def get_lyrics(request: MessageRequest):
     try:
-        # Split song and artist from request
         parts = request.message_request.split(" by ")
         if len(parts) != 2:
             raise HTTPException(status_code=400, detail="Please format request as 'Song Title by Artist Name'")
         
-        song, artist = parts[0].strip(), parts[1].strip()
-        
-        # Search for lyrics
-        search_results = search_lyrics(song, artist)
-        if not search_results:
-            raise HTTPException(status_code=404, detail="No lyrics found.")
-
-        # Get page content and extract lyrics
-        page_content = get_page_content(search_results[0])
-        if not page_content:
-            raise HTTPException(status_code=404, detail="Could not fetch lyrics content.")
-            
-        lyrics = extract_lyrics_from_html(page_content)
-        if not lyrics:
-            raise HTTPException(status_code=404, detail="Could not extract lyrics from page.")
-
-        # Process lyrics with Bedrock
-        processed_lyrics = process_with_bedrock(lyrics)
-        
-        # Extract vocabulary from processed lyrics
-        vocabulary = extract_vocabulary(processed_lyrics)
-
-        return {"lyrics": processed_lyrics, "vocabulary": vocabulary}
+        return await process_song_request(parts[0].strip(), parts[1].strip())
+    except HTTPException as he:
+        raise he
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/api/agent/{song}/{artist}")
 async def get_lyrics_by_url(song: str, artist: str):
     try:
-        message = f"{song} by {artist}"
-        
-        # Search for lyrics
-        search_results = search_lyrics(song, artist)
-        if not search_results:
-            raise HTTPException(status_code=404, detail="No lyrics found.")
-
-        # Get page content and extract lyrics
-        page_content = get_page_content(search_results[0])
-        if not page_content:
-            raise HTTPException(status_code=404, detail="Could not fetch lyrics content.")
-            
-        lyrics = extract_lyrics_from_html(page_content)
-        if not lyrics:
-            raise HTTPException(status_code=404, detail="Could not extract lyrics from page.")
-
-        # Process lyrics with Bedrock
-        processed_lyrics = process_with_bedrock(lyrics)
-        
-        # Extract vocabulary from processed lyrics
-        vocabulary = extract_vocabulary(processed_lyrics)
-
-        return {"lyrics": processed_lyrics, "vocabulary": vocabulary}
+        return await process_song_request(song, artist)
+    except HTTPException as he:
+        raise he
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+async def process_song_request(song: str, artist: str):
+    """Common processing logic for both POST and GET endpoints"""
+    try:
+        # First try direct URL approach
+        lyrics, url = get_lyrics_with_fallback(song, artist)
+        
+        # If direct approach fails, try search
+        if not lyrics:
+            search_results = search_lyrics(song, artist)
+            page_content = get_page_content(search_results[0])
+            if page_content:
+                lyrics = extract_lyrics_from_html(page_content)
+        
+        if not lyrics:
+            raise HTTPException(status_code=404, detail=f"Could not find lyrics for {song} by {artist}")
+
+        # Process lyrics with Bedrock and handle potential failures
+        processed_lyrics = process_with_bedrock(lyrics)
+        if not processed_lyrics or len(processed_lyrics.strip()) < 10:  # Basic validation
+            processed_lyrics = lyrics  # Fallback to original if processing failed
+            
+        # Clean up lyrics by removing empty lines and normalizing whitespace
+        cleaned_lyrics = "\n".join(
+            line.strip() for line in processed_lyrics.split("\n") 
+            if line.strip()
+        )
+        
+        # Extract vocabulary from cleaned lyrics
+        vocabulary = extract_vocabulary(cleaned_lyrics)
+
+        return {
+            "lyrics": cleaned_lyrics,
+            "vocabulary": vocabulary,
+            "note": "Original lyrics shown" if processed_lyrics == lyrics else None
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
