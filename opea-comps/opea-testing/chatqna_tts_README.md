@@ -50,45 +50,7 @@ uv pip install pytest pytest-cov black flake8
 
 ## Quick Start
 
-### 1. Set Environment Variables
-
-```bash
-export host_ip=<your External Public IP>  # export host_ip=$(hostname -I | awk '{print $1}')
-
-# ChatQnA service
-export CHATQNA_SERVICE_HOST_IP=${host_ip}
-export CHATQNA_SERVICE_PORT=8888
-
-# TTS service
-export TTS_SERVICE_HOST_IP=${host_ip}
-export TTS_SERVICE_PORT=7055
-
-# Megaservice port
-export MEGA_SERVICE_PORT=8000
-```
-
-To make these environment variables persistent in your UV virtual environment, add them to the virtual environment's activation script:
-
-```bash
-cat << 'EOF' >> .venv/bin/activate
-
-# Environment variables for ChatQnA and TTS services
-export host_ip=<your External Public IP>  # Replace with your actual IP
-export CHATQNA_SERVICE_HOST_IP=${host_ip}
-export CHATQNA_SERVICE_PORT=8888
-export TTS_SERVICE_HOST_IP=${host_ip}
-export TTS_SERVICE_PORT=7055
-export MEGA_SERVICE_PORT=8000
-EOF
-```
-
-After adding these variables, deactivate and reactivate your virtual environment to apply the changes:
-```bash
-deactivate
-source .venv/bin/activate
-```
-
-### 2. Run with Docker Compose
+### 1. Run with Docker Compose
 
 ```bash
 docker compose up -d
@@ -96,10 +58,10 @@ docker compose up -d
 
 This will start all necessary services, including the underlying microservices needed by ChatQnA.
 
-### 3. Test the Megaservice
+### 2. Test the Megaservice
 
 ```bash
-curl http://${host_ip}:8000/v1/chatqna-tts \
+curl http://localhost:8000/v1/chatqna-tts \
   -X POST \
   -H "Content-Type: application/json" \
   -d '{
@@ -115,27 +77,6 @@ The `voice` parameter is optional. Available options are:
 - `"male"` (male voice)
 
 The response will be a WAV file containing the spoken answer to your question.
-
-## Running Locally Without Docker
-
-If you want to run the service directly from your Python environment:
-
-```bash
-# Make sure your environment is activated
-source .venv/bin/activate
-
-# Set required environment variables (adjust as needed)
-export CHATQNA_SERVICE_HOST_IP=localhost
-export CHATQNA_SERVICE_PORT=8888
-export TTS_SERVICE_HOST_IP=localhost
-export TTS_SERVICE_PORT=7055
-export MEGA_SERVICE_PORT=8000
-
-# Run the megaservice
-python chatqna_tts_mega.py
-```
-
-Note: Running locally requires that you already have ChatQnA and TTS services running elsewhere.
 
 ## API Reference
 
@@ -183,9 +124,9 @@ Most services use pre-built images from the OPEA project on Docker Hub (opea/*).
 Common issues and solutions:
 
 1. **Service Connection Issues**
-   - Verify that all environment variables are set correctly
-   - Ensure host_ip is accessible from within Docker containers
+   - Verify that docker-compose.yaml has correct service configurations
    - Check that all required ports are available and not blocked by firewall
+   - Inspect container logs for connection errors between services
 
 2. **Audio Output Issues**
    - If response.wav is too small (< 1KB), check the service logs for errors
