@@ -19,11 +19,6 @@ flowchart TD
     H --> I["Amazon Bedrock"]
     I --> J["Extract Vocabulary"]
     J --> K(["Return Response"])
-    
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style K fill:#9ff,stroke:#333,stroke-width:2px
-    style I fill:#ff9,stroke:#333,stroke-width:2px
-    style M fill:#fcc,stroke:#333,stroke-width:2px
 ```
 
 ## Project Structure
