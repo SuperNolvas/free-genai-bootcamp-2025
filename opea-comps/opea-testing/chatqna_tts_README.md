@@ -58,6 +58,14 @@ docker compose up -d
 
 This will start all necessary services, including the underlying microservices needed by ChatQnA.
 
+### Example Screenshots of Image Pulls, Services Starting and Running
+
+![Pulling Docker Images](screenshots/images_pull.png)
+
+![Starting Services](screenshots/services_starting.png)
+
+![Running Services](screenshots/services_running.png)
+
 ### 2. Test the Megaservice
 
 ```bash
@@ -77,6 +85,7 @@ The `voice` parameter is optional. Available options are:
 - `"male"` (male voice)
 
 The response will be a WAV file containing the spoken answer to your question.
+
 
 ## API Reference
 
