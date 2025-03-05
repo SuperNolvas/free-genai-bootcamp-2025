@@ -84,6 +84,10 @@ export AWS_REGION=<your-region>
 uvicorn src.main:app --reload
 ```
 
+Once started, you should see the API ready message:
+
+![API Ready](screenshots/API_Ready.png)
+
 2. Access the API through either:
 
    a. Browser-friendly GET request:
@@ -94,6 +98,12 @@ uvicorn src.main:app --reload
    - http://127.0.0.1:8000/api/agent/Yesterday/Beatles
    - http://127.0.0.1:8000/api/agent/Satisfaction/Rolling%20Stones
    - http://127.0.0.1:8000/api/agent/Bohemian%20Rhapsody/Queen
+
+   Example searches and results:
+
+   ![Song Search Example 1](screenshots/song_search1.png)
+   
+   ![Song Search Example 2](screenshots/song_search2.png)
    
    b. POST request to `/api/agent` with JSON body:
    ```json
