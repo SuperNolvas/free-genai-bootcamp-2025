@@ -8,12 +8,13 @@ This project is designed to create an agentic workflow that retrieves song lyric
 flowchart TD
     A(["User Request"]) --> B["FastAPI Endpoint"]
     B --> C{"Try Direct URLs"}
-    C -->|"Success"| E["Get Lyrics Content"]
-    C -->|"Fail"| D["DuckDuckGo Search"]
-    D --> E
+    C -->|"Found"| E["Get Lyrics Content"]
+    C -->|"Not Found"| D["Search with DuckDuckGo"]
+    D -->|"Results Found"| E
+    D -->|"No Results"| M["404 Not Found"]
     E --> F{"Validate Lyrics"}
     F -->|"Invalid"| G["Try Next Source"]
-    G --> E
+    G --> D
     F -->|"Valid"| H["Clean Lyrics"]
     H --> I["Amazon Bedrock"]
     I --> J["Extract Vocabulary"]
@@ -22,6 +23,7 @@ flowchart TD
     style A fill:#f9f,stroke:#333,stroke-width:2px
     style K fill:#9ff,stroke:#333,stroke-width:2px
     style I fill:#ff9,stroke:#333,stroke-width:2px
+    style M fill:#fcc,stroke:#333,stroke-width:2px
 ```
 
 ## Project Structure
