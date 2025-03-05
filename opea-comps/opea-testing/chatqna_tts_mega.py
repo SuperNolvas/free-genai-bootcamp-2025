@@ -18,7 +18,7 @@ from comps.cores.proto.api_protocol import (
     UsageInfo,
 )
 from comps.cores.proto.docarray import LLMParams
-from fastapi import Request
+from fastapi import Request, Response
 from fastapi.responses import StreamingResponse
 
 # Environment variables configuration
@@ -106,43 +106,43 @@ class ChatQnATTSService:
     async def wait_for_service(self, name: str, host: str, port: int, max_retries: int = 10, delay: int = 10):
         """Wait for a service to become available."""
         print(f"[INFO] Checking {name} service at {host}:{port}")
-        endpoints = {
-            "ChatQnA": "/v1/chatqna",  # Updated to correct endpoint
-            "TTS": "/v1/audio/speech"
-        }
-        health_endpoint = endpoints.get(name, "/healthz")
         
         for attempt in range(max_retries):
             try:
                 async with aiohttp.ClientSession() as session:
-                    url = f"http://{host}:{port}{health_endpoint}"
-                    print(f"[INFO] Attempting to connect to {url}")
-                    
-                    if name == "TTS":
+                    if name == "ChatQnA":
+                        # For ChatQnA service, just check if the server is responding
+                        url = f"http://{host}:{port}/v1/chatqna"
+                        print(f"[INFO] Attempting to connect to {url}")
+                        
+                        # Simple GET request to check if service is up
+                        async with session.get(url, timeout=5) as response:
+                            # Consider any response (even 404) as success since we're just checking if server is responsive
+                            print(f"[INFO] Successfully connected to {name} (status: {response.status})")
+                            return True
+                    elif name == "TTS":
+                        # For TTS service, use existing approach
+                        url = f"http://{host}:{port}/v1/audio/speech"
+                        print(f"[INFO] Attempting to connect to {url}")
+                        
                         payload = {
                             "input": "test",
                             "voice": "default",
                             "response_format": "mp3"
                         }
-                        async with session.post(url, json=payload) as response:
+                        async with session.post(url, json=payload, timeout=5) as response:
                             if response.status == 200:
                                 print(f"[INFO] Successfully connected to {name}")
                                 return True
-                    else:
-                        # For ChatQnA service, send a test query
-                        payload = {
-                            "messages": "test"
-                        }
-                        async with session.post(url, json=payload) as response:
-                            if response.status in [200, 404]:  # 404 is ok for POST-only endpoints
-                                print(f"[INFO] Successfully connected to {name}")
-                                return True
+            except asyncio.TimeoutError:
+                print(f"[WARN] Attempt {attempt + 1}/{max_retries} to connect to {name} timed out")
             except Exception as e:
                 print(f"[WARN] Attempt {attempt + 1}/{max_retries} to connect to {name} failed: {str(e)}")
-                if attempt < max_retries - 1:
-                    print(f"[INFO] Waiting {delay} seconds before retry...")
-                    await asyncio.sleep(delay)
-                continue
+            
+            if attempt < max_retries - 1:
+                print(f"[INFO] Waiting {delay} seconds before retry...")
+                await asyncio.sleep(delay)
+        
         print(f"[ERROR] Failed to connect to {name} service after {max_retries} attempts")
         return False
 
@@ -177,46 +177,71 @@ class ChatQnATTSService:
     
     async def handle_request(self, request: Request):
         """Handle incoming requests, process through ChatQnA, then through TTS."""
-        
-        data = await request.json()
-        
-        # Format messages as a list with role and content
-        if isinstance(data["messages"], str):
-            messages = [{"role": "user", "content": data["messages"]}]
-        else:
-            messages = data["messages"]
-        
-        # Parse the incoming request using model_validate
-        chat_request = ChatCompletionRequest.model_validate({
-            **data,
-            "messages": messages
-        })
-        
-        # Configure parameters for the LLM in ChatQnA service
-        parameters = LLMParams(
-            max_tokens=chat_request.max_tokens if chat_request.max_tokens else 1024,
-            top_k=chat_request.top_k if chat_request.top_k else 10,
-            top_p=chat_request.top_p if chat_request.top_p else 0.95,
-            temperature=chat_request.temperature if chat_request.temperature else 0.01,
-            frequency_penalty=chat_request.frequency_penalty if chat_request.frequency_penalty else 0.0,
-            presence_penalty=chat_request.presence_penalty if chat_request.presence_penalty else 0.0,
-            repetition_penalty=chat_request.repetition_penalty if chat_request.repetition_penalty else 1.03,
-            stream=False,  # We can't stream when chaining to TTS
-            chat_template=chat_request.chat_template if chat_request.chat_template else None,
-        )
-        
-        # Schedule the execution of the service pipeline
-        result_dict, runtime_graph = await self.megaservice.schedule(
-            initial_inputs={"messages": messages},  # Pass formatted messages directly
-            llm_parameters=parameters,
-            voice=data.get("voice", "default")
-        )
-        
-        # Extract the final result from the TTS service
-        last_node = runtime_graph.all_leaves()[-1]
-        audio_response = result_dict[last_node]
-        
-        return audio_response
+        try:
+            data = await request.json()
+            print(f"[DEBUG] Received data: {data}")
+            
+            # Check if the request contains 'question' and 'context' (ChatQnA format)
+            if "question" in data:
+                # Convert the question and context to a chat message format
+                content = data["question"]
+                if "context" in data:
+                    content = f"Question: {data['question']}\nContext: {data['context']}"
+                messages = [{"role": "user", "content": content}]
+                print(f"[DEBUG] Created messages from question format: {messages}")
+            # Support the standard messages format as well
+            elif "messages" in data:
+                # Format messages as a list with role and content
+                if isinstance(data["messages"], str):
+                    messages = [{"role": "user", "content": data["messages"]}]
+                else:
+                    messages = data["messages"]
+                print(f"[DEBUG] Using provided messages format: {messages}")
+            else:
+                # Default case if neither format is provided
+                error_msg = "Either 'question' or 'messages' must be provided"
+                print(f"[ERROR] {error_msg}")
+                return Response(content=error_msg, status_code=400)
+            
+            # Parse the incoming request using model_validate
+            chat_request = ChatCompletionRequest.model_validate({
+                **data,
+                "messages": messages
+            })
+            
+            # Configure parameters for the LLM in ChatQnA service
+            parameters = LLMParams(
+                max_tokens=chat_request.max_tokens if hasattr(chat_request, 'max_tokens') and chat_request.max_tokens else 1024,
+                top_k=chat_request.top_k if hasattr(chat_request, 'top_k') and chat_request.top_k else 10,
+                top_p=chat_request.top_p if hasattr(chat_request, 'top_p') and chat_request.top_p else 0.95,
+                temperature=chat_request.temperature if hasattr(chat_request, 'temperature') and chat_request.temperature else 0.01,
+                frequency_penalty=chat_request.frequency_penalty if hasattr(chat_request, 'frequency_penalty') and chat_request.frequency_penalty else 0.0,
+                presence_penalty=chat_request.presence_penalty if hasattr(chat_request, 'presence_penalty') and chat_request.presence_penalty else 0.0,
+                repetition_penalty=chat_request.repetition_penalty if hasattr(chat_request, 'repetition_penalty') and chat_request.repetition_penalty else 1.03,
+                stream=False,  # We can't stream when chaining to TTS
+                chat_template=chat_request.chat_template if hasattr(chat_request, 'chat_template') and chat_request.chat_template else None,
+            )
+            
+            print(f"[DEBUG] Scheduling execution with messages: {messages}")
+            # Schedule the execution of the service pipeline
+            result_dict, runtime_graph = await self.megaservice.schedule(
+                initial_inputs={"messages": messages},
+                llm_parameters=parameters,
+                voice=data.get("voice", "default")
+            )
+            
+            # Extract the final result from the TTS service
+            last_node = runtime_graph.all_leaves()[-1]
+            print(f"[DEBUG] Last node: {last_node}, available keys: {result_dict.keys()}")
+            audio_response = result_dict[last_node]
+            
+            # Return the audio as a streaming response
+            return StreamingResponse(content=audio_response, media_type="audio/wav")
+        except Exception as e:
+            print(f"[ERROR] Exception in handle_request: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response(content=f"Error processing request: {str(e)}", status_code=500)
     
     async def start(self):
         """Start the megaservice with service health checks."""
