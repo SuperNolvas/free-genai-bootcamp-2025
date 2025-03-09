@@ -1,1 +1,1 @@
-{"detail":[{"type":"missing","loc":["body","input"],"msg":"Field required","input":{"detail":"Not Found"}}]}
+Error processing request: 500, message='Attempt to decode JSON with unexpected mimetype: text/plain; charset=utf-8', url='http://chatqna-backend-server/v1/chatqna'
