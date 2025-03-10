@@ -18,10 +18,15 @@
             const artist = document.getElementById('artist').value;
             const lyricsDisplay = document.getElementById('lyrics-display');
 
-            fetch(`/api/agent/${encodeURIComponent(song)}/${encodeURIComponent(artist)}`)
-                .then(response => response.json())
+            fetch(`./api/agent/${encodeURIComponent(song)}/${encodeURIComponent(artist)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
-                    lyricsDisplay.innerHTML = `<pre>${data.lyrics}</pre>`; // Use <pre> for formatting
+                    lyricsDisplay.innerHTML = `<pre>${data.lyrics}</pre>`;
                 })
                 .catch(error => {
                     lyricsDisplay.innerHTML = `<p>Error: ${error.message}</p>`;

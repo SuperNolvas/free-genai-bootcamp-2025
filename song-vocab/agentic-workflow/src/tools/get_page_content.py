@@ -26,27 +26,31 @@ def clean_artist_name(artist: str) -> list:
     artist = artist.strip().lower()
     
     # Special cases where we don't want to add "the"
-    no_the_artists = {'queen', 'metallica', 'nirvana', 'pink floyd'}
+    no_the_artists = {'queen', 'metallica', 'nirvana', 'pink floyd', 'beatles'}
     
     # Handle "The" prefix
     if artist.startswith('the '):
-        # Add version without "the"
-        variants.append(sanitize_for_url(artist[4:]))
-        # Add version with "the" as suffix
-        variants.append(sanitize_for_url(f"{artist[4:]}-the"))
+        base_name = artist[4:]
+        if base_name in no_the_artists:
+            variants.append(sanitize_for_url(base_name))
+        else:
+            variants.append(sanitize_for_url(base_name))
+            variants.append(sanitize_for_url(f"the-{base_name}"))
     elif artist.lower() in no_the_artists:
         # For bands that never use "the", just use the name as is
         variants.append(sanitize_for_url(artist))
     else:
         # Add regular version
         variants.append(sanitize_for_url(artist))
-        # Add version with "the" prefix if not already present
-        variants.append(sanitize_for_url(f"the-{artist}"))
+        # Add version with "the" prefix if not in no_the_artists
+        if artist not in no_the_artists:
+            variants.append(sanitize_for_url(f"the-{artist}"))
     
     return list(set(variants))
 
 def get_alternate_titles(song: str, artist: str) -> list:
     """Get common alternate titles for well-known songs"""
+    # First try known mappings
     known_songs = {
         ('yesterday', 'beatles'): ['yesterday'],
         ('yesterday', 'the beatles'): ['yesterday'],
@@ -59,17 +63,42 @@ def get_alternate_titles(song: str, artist: str) -> list:
         ('bohemian rhapsody', 'queen'): [
             'bohemian-rhapsody',
             'queen-bohemian-rhapsody'
+        ],
+        ('please please me', 'beatles'): [
+            'please-please-me',
+            'the-beatles-please-please-me',
+            'beatles-please-please-me'
+        ],
+        ('please please me', 'the beatles'): [
+            'please-please-me',
+            'the-beatles-please-please-me',
+            'beatles-please-please-me'
         ]
     }
     
     # Try different artist variants for lookup
     artist_variants = [artist.lower(), artist.lower().replace('the ', '')]
     for artist_var in artist_variants:
-        key = (song.lower().replace(' ', ''), artist_var)
+        key = (song.lower().strip(), artist_var)
         if key in known_songs:
             return known_songs[key]
     
-    return [sanitize_for_url(song)]
+    # If no known mapping, generate variations
+    base = sanitize_for_url(song)
+    variants = [base]
+    
+    # Add variation with artist name prefix
+    artist_prefix = sanitize_for_url(artist.lower().replace('the ', ''))
+    variants.append(f"{artist_prefix}-{base}")
+    
+    # Add variation with spaces instead of hyphens
+    variants.append(base.replace('-', ' '))
+    
+    # Add variation with "the" prefix for artist if applicable
+    if not artist.lower().startswith('the '):
+        variants.append(f"the-{artist_prefix}-{base}")
+    
+    return list(set(variants))
 
 def is_correct_song_page(html_content: str, song: str, artist: str) -> bool:
     """Check if the HTML page is for the correct song before extracting lyrics"""
@@ -214,18 +243,18 @@ def construct_direct_urls(song: str, artist: str) -> list:
             az_artist = artist_name.replace('-', '').lower()
             az_song = song_variant.replace('-', '').lower()
             
-            # AZLyrics needs "the" removed and no special chars
-            if az_artist.startswith('the'):
-                az_artist = az_artist[3:]
+            # For well-known bands like Beatles, use simpler URLs
+            if az_artist in ['beatles', 'thebeatles']:
+                az_artist = 'beatles'
             
             # Construct URLs with proper artist/song combinations
             urls.extend([
-                f"https://www.azlyrics.com/lyrics/{az_artist}/{az_song}.html",
                 f"https://genius.com/{artist_name}-{song_variant}-lyrics",
-                f"https://genius.com/{song_variant}-lyrics", # Some Genius URLs don't include artist
-                f"https://www.lyrics.com/{song_variant}-lyrics-{artist_name}"
+                f"https://genius.com/{song_variant}-lyrics",  # Some Genius URLs don't include artist
+                f"https://www.azlyrics.com/lyrics/{az_artist}/{az_song}.html",
             ])
     
+    # Remove any duplicate URLs
     return list(set(urls))
 
 def get_page_content(url: str) -> Optional[str]:

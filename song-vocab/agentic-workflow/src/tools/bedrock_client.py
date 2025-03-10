@@ -1,6 +1,6 @@
 import boto3
 import json
-from ...config import Config
+from config import Config
 
 def get_bedrock_client():
     """Initialize and return a Bedrock client."""
