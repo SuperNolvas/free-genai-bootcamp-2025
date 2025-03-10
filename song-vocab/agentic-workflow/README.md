@@ -78,18 +78,34 @@ export AWS_REGION=<your-region>
 
 ## Usage
 
+### Front-End Interface (Recommended)
 1. Start the FastAPI application:
-
 ```bash
 uvicorn src.main:app --reload
 ```
 
 Once started, you should see the API ready message:
-
 ![API Ready](screenshots/API_Ready.png)
 
-2. Access the API through either:
+2. Open your browser and navigate to:
+```
+http://127.0.0.1:8000/
+```
 
+3. Use the web interface to search for songs:
+   - Enter the song title and artist name in the provided fields
+   - Click "Get Lyrics" to retrieve the lyrics and vocabulary analysis
+
+Example of the front-end interface in action:
+![Front End Search](screenshots/Front_End_Lyrics_Search.png)
+
+If the lyrics cannot be found through direct URLs, the system will automatically try fallback methods:
+![Terminal Fallback](screenshots/Terminal_output_fallback.png)
+
+### API Direct Usage (Deprecated)
+> **Note**: While these methods are still supported, we recommend using the front-end interface above for a better user experience.
+
+You can access the API through either:
    a. Browser-friendly GET request:
    ```
    http://127.0.0.1:8000/api/agent/{song}/{artist}
