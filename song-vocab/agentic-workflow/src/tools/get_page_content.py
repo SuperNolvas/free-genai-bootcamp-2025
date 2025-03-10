@@ -233,8 +233,16 @@ def validate_lyrics_content(lyrics: str, song: str, artist: str, html_content: s
 def construct_direct_urls(song: str, artist: str) -> list:
     """Construct direct URLs for popular lyrics websites"""
     urls = []
+    
+    # Fix common misspellings
+    artist = artist.lower().replace('roling', 'rolling')
+    
     song_variants = get_alternate_titles(song, artist)
     artist_variants = clean_artist_name(artist)
+    
+    print(f"Trying to find lyrics for '{song}' by '{artist}'")
+    print(f"Artist variants: {artist_variants}")
+    print(f"Song variants: {song_variants}")
     
     # Try all combinations of artist and song variants
     for artist_name in artist_variants:
@@ -243,29 +251,33 @@ def construct_direct_urls(song: str, artist: str) -> list:
             az_artist = artist_name.replace('-', '').lower()
             az_song = song_variant.replace('-', '').lower()
             
-            # For Beatles songs, use specific URL patterns that are known to work
-            if az_artist in ['beatles', 'thebeatles']:
+            # Remove articles and common words for better URL matching
+            az_song = az_song.replace('the-', '').replace('a-', '')
+            
+            # Special case for Rolling Stones
+            if 'rolling' in az_artist:
                 urls.extend([
-                    f"https://www.azlyrics.com/lyrics/beatles/{az_song}.html",
-                    f"https://genius.com/The-beatles-{song_variant}-lyrics",
-                    f"https://genius.com/Beatles-{song_variant}-lyrics",
+                    f"https://www.azlyrics.com/lyrics/rollingstones/{az_song}.html",
+                    f"https://genius.com/The-rolling-stones-{song_variant}-lyrics",
+                    f"https://genius.com/Rolling-stones-{song_variant}-lyrics"
                 ])
-                # Add special case for Please Please Me
-                if song.lower() == 'please please me':
+                # Special case for Satisfaction
+                if 'satisfaction' in song.lower():
                     urls.extend([
-                        "https://www.azlyrics.com/lyrics/beatles/pleasepleaseme.html",
-                        "https://genius.com/The-beatles-please-please-me-lyrics"
+                        "https://www.azlyrics.com/lyrics/rollingstones/satisfaction.html",
+                        "https://www.azlyrics.com/lyrics/rollingstones/cantgetnosatisfaction.html",
+                        "https://genius.com/The-rolling-stones-i-cant-get-no-satisfaction-lyrics"
                     ])
             else:
-                # Standard URL patterns for other artists
                 urls.extend([
                     f"https://genius.com/{artist_name}-{song_variant}-lyrics",
                     f"https://genius.com/{song_variant}-lyrics",
-                    f"https://www.azlyrics.com/lyrics/{az_artist}/{az_song}.html",
+                    f"https://www.azlyrics.com/lyrics/{az_artist}/{az_song}.html"
                 ])
     
-    # Remove any duplicate URLs and return
-    return list(set(urls))
+    unique_urls = list(set(urls))
+    print(f"Generated {len(unique_urls)} unique URLs to try")
+    return unique_urls
 
 def get_page_content(url: str) -> Optional[str]:
     """Fetch page content with proper headers and error handling"""
