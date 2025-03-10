@@ -95,43 +95,23 @@ graph TD
 
 ## Request Processing Pipeline
 
-1. **Input Processing**
-   ```mermaid
-   sequenceDiagram
-       participant User
-       participant API
-       participant Embedding
-       participant VectorDB
-       
-       User->>API: Submit Query
-       API->>Embedding: Generate Embeddings
-       Embedding->>VectorDB: Store/Search Vectors
-   ```
+1.  **Input Processing**
+    ```mermaid
+    graph LR
+        User -- Submit Query --> API -- Generate Embeddings --> EmbeddingServer -- Store/Search Vectors --> VectorDB
+    ```
 
-2. **Document Retrieval & Processing**
-   ```mermaid
-   sequenceDiagram
-       participant VectorDB
-       participant Retriever
-       participant Reranking
-       participant LLM
-       
-       VectorDB->>Retriever: Similar Documents
-       Retriever->>Reranking: Candidate Docs
-       Reranking->>LLM: Ranked Documents
-       LLM->>API: Generated Response
-   ```
+2.  **Document Retrieval & Processing**
+    ```mermaid
+    graph LR
+        VectorDB -- Similar Documents --> RetrieverServer -- Candidate Docs --> RerankingServer -- Ranked Documents --> LLMServer -- Generated Response --> API
+    ```
 
-3. **Speech Synthesis**
-   ```mermaid
-   sequenceDiagram
-       participant API
-       participant SpeechT5
-       participant User
-       
-       API->>SpeechT5: Text Response
-       SpeechT5->>User: WAV Audio File
-   ```
+3.  **Speech Synthesis**
+    ```mermaid
+    graph LR
+        API -- Text Response --> SpeechT5Server -- WAV Audio File --> User
+    ```
 
 ## API Specifications
 
