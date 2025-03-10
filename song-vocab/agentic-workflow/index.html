@@ -2,6 +2,11 @@
 <html>
 <head>
     <title>Song Lyrics Finder</title>
+    <style>
+        .error { color: red; }
+        pre { white-space: pre-wrap; }
+        .loading { color: #666; }
+    </style>
 </head>
 <body>
     <h1>Song Lyrics Finder</h1>
@@ -17,19 +22,40 @@
             const song = document.getElementById('song').value;
             const artist = document.getElementById('artist').value;
             const lyricsDisplay = document.getElementById('lyrics-display');
-
+            
+            // Show loading state
+            lyricsDisplay.innerHTML = '<p class="loading">Loading lyrics...</p>';
+            
             fetch(`./api/agent/${encodeURIComponent(song)}/${encodeURIComponent(artist)}`)
                 .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response.json();
+                    console.log('Response status:', response.status);
+                    return response.json().then(data => ({
+                        status: response.status,
+                        data: data
+                    }));
                 })
-                .then(data => {
-                    lyricsDisplay.innerHTML = `<pre>${data.lyrics}</pre>`;
+                .then(({ status, data }) => {
+                    console.log('Response data:', data);
+                    
+                    if (status === 200 && data.lyrics) {
+                        let output = `<pre>${data.lyrics}</pre>`;
+                        if (data.vocabulary) {
+                            output += '<h3>Vocabulary:</h3><ul>';
+                            data.vocabulary.forEach(word => {
+                                output += `<li>${word}</li>`;
+                            });
+                            output += '</ul>';
+                        }
+                        lyricsDisplay.innerHTML = output;
+                    } else if (data.error) {
+                        lyricsDisplay.innerHTML = `<p class="error">Error: ${data.message || data.error}</p>`;
+                    } else {
+                        lyricsDisplay.innerHTML = `<p class="error">No lyrics found</p>`;
+                    }
                 })
                 .catch(error => {
-                    lyricsDisplay.innerHTML = `<p>Error: ${error.message}</p>`;
+                    console.error('Error:', error);
+                    lyricsDisplay.innerHTML = `<p class="error">Error: ${error.message}</p>`;
                 });
         }
     </script>

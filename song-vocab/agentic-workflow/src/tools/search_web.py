@@ -24,56 +24,74 @@ def search_lyrics(song: str, artist: str):
     variants = get_alternate_titles(song, artist)
     artist_variants = clean_artist_name(artist)
     
+    # For Beatles songs, add specific site searches first
+    if any('beatles' in variant.lower() for variant in artist_variants):
+        specific_urls = [
+            'www.beatleslyrics.com',
+            'www.thebeatles.com'
+        ]
+        for site in specific_urls:
+            try:
+                query = f'site:{site} "{song}"'
+                ddgs = DDGS()
+                results = list(ddgs.text(query, max_results=3))
+                
+                if results and any('link' in r for r in results):
+                    return [r['link'] for r in results if 'link' in r]
+            except Exception:
+                continue
+    
+    # Try with each artist and song variant
     for artist_name in artist_variants:
         for song_variant in variants:
-            # Try exact match search first
-            query = f'"{song_variant}" "{artist_name}" lyrics'
+            # Try both with and without quotes
+            queries = [
+                f'"{song_variant}" "{artist_name}" lyrics',
+                f'{song_variant} {artist_name} lyrics official'
+            ]
             
-            for attempt in range(max_retries):
-                try:
-                    ddgs = DDGS()
-                    results = list(ddgs.text(query, max_results=5))
-                    
-                    if results:
-                        # Try each result with strict validation
-                        for result in results:
-                            if 'link' not in result:
-                                continue
-                                
-                            url = result['link']
-                            content = get_page_content(url)
-                            
-                            # First check if it's the right song page
-                            if not content or not is_correct_song_page(content, song, artist):
-                                continue
-                                
-                            lyrics = extract_lyrics_from_html(content)
-                            if lyrics and validate_lyrics_content(lyrics, song, artist, content):
-                                return [url]
-                    
-                    if attempt < max_retries - 1:
-                        time.sleep(retry_delay)
-                        continue
+            for query in queries:
+                for attempt in range(max_retries):
+                    try:
+                        ddgs = DDGS()
+                        results = list(ddgs.text(query, max_results=5))
                         
-                except Exception as e:
-                    if "Ratelimit" in str(e):
-                        if attempt < max_retries - 1:
-                            time.sleep(retry_delay * (attempt + 1))
-                            continue
-                    else:
-                        print(f"Search error: {e}")
+                        if results:
+                            valid_urls = []
+                            for result in results:
+                                if 'link' not in result:
+                                    continue
+                                    
+                                url = result['link']
+                                content = get_page_content(url)
+                                
+                                if not content or not is_correct_song_page(content, song, artist):
+                                    continue
+                                    
+                                lyrics = extract_lyrics_from_html(content)
+                                if lyrics and validate_lyrics_content(lyrics, song, artist, content):
+                                    valid_urls.append(url)
+                            
+                            if valid_urls:
+                                return valid_urls
+                        
                         if attempt < max_retries - 1:
                             time.sleep(retry_delay)
-                            continue
+                    
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            time.sleep(retry_delay * (attempt + 1))
+                        continue
     
-    # If all attempts fail, try one last time with a site-specific search
-    lyrics_sites = ['genius.com', 'azlyrics.com', 'lyrics.com']
+    # Try site-specific searches as last resort
+    lyrics_sites = ['genius.com', 'azlyrics.com', 'lyrics.com', 'metrolyrics.com']
     for site in lyrics_sites:
         try:
             query = f'site:{site} "{song}" "{artist}" lyrics'
             ddgs = DDGS()
             results = list(ddgs.text(query, max_results=3))
             
+            valid_urls = []
             for result in results:
                 if 'link' not in result:
                     continue
@@ -85,12 +103,13 @@ def search_lyrics(song: str, artist: str):
                     
                 lyrics = extract_lyrics_from_html(content)
                 if lyrics and validate_lyrics_content(lyrics, song, artist, content):
-                    return [url]
+                    valid_urls.append(url)
+            
+            if valid_urls:
+                return valid_urls
                     
         except Exception:
             continue
     
-    raise HTTPException(
-        status_code=404,
-        detail=f"Could not find verified lyrics for '{song}' by {artist}. Please check the song name or try again later."
-    )
+    # Return empty list instead of raising an exception
+    return []

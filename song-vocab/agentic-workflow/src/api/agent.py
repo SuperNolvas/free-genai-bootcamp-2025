@@ -39,15 +39,19 @@ async def get_lyrics_by_url(song: str, artist: str):
         
         if not lyrics:
             return {
-                "error": "Lyrics not found",
-                "message": f"Could not find lyrics for '{song}' by {artist}. Please check the song title and artist name.",
+                "error": "404",
+                "message": f"Could not find verified lyrics for '{song}' by {artist}. Please check the song name or try again later.",
                 "status": 404
             }
             
         # Process lyrics with Bedrock and handle potential failures
-        processed_lyrics = process_with_bedrock(lyrics)
-        if not processed_lyrics or len(processed_lyrics.strip()) < 10:  # Basic validation
-            processed_lyrics = lyrics  # Fallback to original if processing failed
+        try:
+            processed_lyrics = process_with_bedrock(lyrics)
+            if not processed_lyrics or len(processed_lyrics.strip()) < 10:  # Basic validation
+                processed_lyrics = lyrics  # Fallback to original if processing failed
+        except Exception as e:
+            print(f"Bedrock processing failed: {e}")
+            processed_lyrics = lyrics  # Use original lyrics if processing fails
             
         # Clean up lyrics by removing empty lines and normalizing whitespace
         cleaned_lyrics = "\n".join(
@@ -60,11 +64,13 @@ async def get_lyrics_by_url(song: str, artist: str):
         return {
             "lyrics": cleaned_lyrics,
             "vocabulary": vocabulary,
-            "note": "Original lyrics shown" if processed_lyrics == lyrics else None
+            "note": "Original lyrics shown" if processed_lyrics == lyrics else None,
+            "status": 200
         }
     except Exception as e:
+        print(f"Error processing request: {e}")
         return {
-            "error": "Internal server error",
+            "error": "500",
             "message": str(e),
             "status": 500
         }

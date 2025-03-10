@@ -243,18 +243,28 @@ def construct_direct_urls(song: str, artist: str) -> list:
             az_artist = artist_name.replace('-', '').lower()
             az_song = song_variant.replace('-', '').lower()
             
-            # For well-known bands like Beatles, use simpler URLs
+            # For Beatles songs, use specific URL patterns that are known to work
             if az_artist in ['beatles', 'thebeatles']:
-                az_artist = 'beatles'
-            
-            # Construct URLs with proper artist/song combinations
-            urls.extend([
-                f"https://genius.com/{artist_name}-{song_variant}-lyrics",
-                f"https://genius.com/{song_variant}-lyrics",  # Some Genius URLs don't include artist
-                f"https://www.azlyrics.com/lyrics/{az_artist}/{az_song}.html",
-            ])
+                urls.extend([
+                    f"https://www.azlyrics.com/lyrics/beatles/{az_song}.html",
+                    f"https://genius.com/The-beatles-{song_variant}-lyrics",
+                    f"https://genius.com/Beatles-{song_variant}-lyrics",
+                ])
+                # Add special case for Please Please Me
+                if song.lower() == 'please please me':
+                    urls.extend([
+                        "https://www.azlyrics.com/lyrics/beatles/pleasepleaseme.html",
+                        "https://genius.com/The-beatles-please-please-me-lyrics"
+                    ])
+            else:
+                # Standard URL patterns for other artists
+                urls.extend([
+                    f"https://genius.com/{artist_name}-{song_variant}-lyrics",
+                    f"https://genius.com/{song_variant}-lyrics",
+                    f"https://www.azlyrics.com/lyrics/{az_artist}/{az_song}.html",
+                ])
     
-    # Remove any duplicate URLs
+    # Remove any duplicate URLs and return
     return list(set(urls))
 
 def get_page_content(url: str) -> Optional[str]:
