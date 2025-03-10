@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Song Lyrics Finder</title>
+</head>
+<body>
+    <h1>Song Lyrics Finder</h1>
+    <label for="song">Song:</label><br>
+    <input type="text" id="song" name="song"><br><br>
+    <label for="artist">Artist:</label><br>
+    <input type="text" id="artist" name="artist"><br><br>
+    <button onclick="getLyrics()">Get Lyrics</button>
+    <div id="lyrics-display"></div>
+
+    <script>
+        function getLyrics() {
+            const song = document.getElementById('song').value;
+            const artist = document.getElementById('artist').value;
+            const lyricsDisplay = document.getElementById('lyrics-display');
+
+            fetch(`/api/agent/${encodeURIComponent(song)}/${encodeURIComponent(artist)}`)
+                .then(response => response.json())
+                .then(data => {
+                    lyricsDisplay.innerHTML = `<pre>${data.lyrics}</pre>`; // Use <pre> for formatting
+                })
+                .catch(error => {
+                    lyricsDisplay.innerHTML = `<p>Error: ${error.message}</p>`;
+                });
+        }
+    </script>
+</body>
+</html>
