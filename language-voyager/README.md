@@ -391,6 +391,81 @@ This flowchart illustrates the complete logic flow of the Language Voyager game.
 
 This comprehensive logic flow ensures that the geographic context directly shapes the language learning experience, making map interaction an integral part of the educational process rather than just a visual element.
 
+## Getting Started
+
+### Prerequisites
+- Docker and Docker Compose
+- Python 3.10 or higher
+- PostgreSQL 15
+- Redis 7
+
+### Setup Instructions
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd language-voyager
+```
+
+2. Create and configure environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your configuration
+```
+
+3. Start the services using Docker Compose:
+```bash
+docker compose up -d
+```
+
+4. Verify the setup:
+```bash
+# Check if the API is running and database is connected
+curl http://localhost:8000/health
+
+# Expected response:
+{
+    "status": "online",
+    "database": "healthy"
+}
+```
+
+### Development Setup
+
+If you want to run the application locally for development:
+
+1. Create a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows use: .\venv\Scripts\activate
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Start the application:
+```bash
+uvicorn app.main:app --reload
+```
+
+T
+
+### Container Health Checks
+
+The application uses Docker health checks to ensure services are properly initialized:
+- PostgreSQL: Checks database readiness
+- Redis: Verifies cache service availability
+- Web API: Waits for dependent services before starting
+
+You can monitor container health status using:
+```bash
+docker compose ps
+```
+
+--- 
+
 **Feasibility Evaluation of Language Voyager: Geo-Immersive Language Learning**
 
 The **Language Voyager** project presents an innovative approach to language learning through geospatial immersion, leveraging modern GIS and AI technologies. Below is a structured evaluation of its feasibility:

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from .database.config import engine, get_db
 from .models import user, progress, content
 
@@ -26,8 +27,8 @@ async def root():
 @app.get("/health")
 async def health_check(db: Session = Depends(get_db)):
     try:
-        # Try to make a simple query to test DB connection
-        db.execute("SELECT 1")
+        # Use text() to properly declare SQL expression
+        db.execute(text("SELECT 1"))
         db_status = "healthy"
     except Exception as e:
         db_status = f"unhealthy: {str(e)}"
