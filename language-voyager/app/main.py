@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from .database.config import engine, get_db
 from .models import user, progress, content
+from .routers import auth
 
 # Create database tables
 user.Base.metadata.create_all(bind=engine)
@@ -19,6 +20,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(auth.router)
 
 @app.get("/")
 async def root():
