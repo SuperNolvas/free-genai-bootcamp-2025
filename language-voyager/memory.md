@@ -426,6 +426,7 @@ Verification Status:
    - Used `docker compose build --no-cache web` to force fresh build
    - Success confirmed with new package installation:
      ```
+
      => [web 4/5] RUN pip install --no-cache-dir -r requirements.txt
      ```
    - Services restarted and health checks passed:
@@ -510,3 +511,74 @@ Request Flow:
    - Health check configuration preserved
 
 *Note: Environment configuration consolidated and documented. All services verified working with unified configuration.*
+
+## API Structure Planning
+### Base URL: /api/v1
+
+1. **Authentication Routes** (/auth) ✅
+   - POST /register - User registration
+   - POST /token - Login and token generation
+   - GET /me - Get current user profile
+   - PUT /me - Update user profile
+   - POST /logout - Logout (revoke token)
+
+2. **Progress Tracking Routes** (/progress)
+   - GET / - Get user's overall progress
+   - POST / - Update progress for current session
+   - GET /language/{lang} - Get progress for specific language
+   - GET /region/{region} - Get progress in specific region
+   - POST /achievement - Record new achievement
+   - GET /achievements - List user achievements
+
+3. **Language Content Routes** (/content)
+   - GET /vocabulary - Get vocabulary for current location/level
+   - GET /phrases - Get relevant phrases
+   - GET /challenges - Get available challenges
+   - POST /challenges/{id}/attempt - Submit challenge attempt
+   - GET /cultural-notes - Get cultural information
+   - GET /search - Search language content
+
+4. **Map Integration Routes** (/map)
+   - GET /regions - List available regions
+   - GET /pois - Get points of interest
+   - GET /region/{region}/details - Get region details
+   - GET /current-location/content - Get content for current location
+
+5. **Social Features** (/social)
+   - GET /leaderboard - Global or regional rankings
+   - GET /nearby-users - Find users in same region
+   - POST /interactions - Record user interaction
+   - GET /community-challenges - Get group challenges
+
+6. **System Routes** ✅
+   - GET /health - System health check
+   - GET /version - API version info
+   - GET /metrics - System metrics (protected)
+
+### Implementation Priority:
+1. Core Routes (auth, health) ✅
+2. Progress Tracking Routes
+3. Language Content Routes
+4. Map Integration Routes
+5. Social Features
+
+### Common Response Structure:
+```json
+{
+  "success": boolean,
+  "data": any,
+  "message": string,
+  "errors": array (optional)
+}
+```
+
+### Error Handling:
+- 400: Bad Request - Invalid input
+- 401: Unauthorized - Missing/invalid token
+- 403: Forbidden - Insufficient permissions
+- 404: Not Found - Resource doesn't exist
+- 422: Unprocessable Entity - Valid token but semantic errors
+- 429: Too Many Requests - Rate limit exceeded
+- 500: Internal Server Error - Server-side issues
+
+*Note: This API structure supports the core features while maintaining flexibility for future additions. Routes will be implemented in priority order.*
