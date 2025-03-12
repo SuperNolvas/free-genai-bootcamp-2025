@@ -378,6 +378,34 @@ Verification Status:
 
 *Note: First successful end-to-end test of user registration system completed. Ready to proceed with login endpoint testing.*
 
+### Protected Endpoint Testing
+1. User Profile Endpoint (/auth/me)
+```bash
+curl -X GET http://localhost:8000/auth/me \
+     -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZXhwIjoxNzQxODEyNDY1fQ.s7-MCh2RzkcBAD45ojAuhhZK56YS2zzoTORa-seEjPU"
+
+Response:
+{
+  "id": 1,
+  "email": "test@example.com",
+  "username": "testuser",
+  "is_active": true
+}
+```
+
+Verification Status:
+- JWT token authentication working
+- Protected endpoint successfully validates token
+- User data retrieved correctly
+- Response format matches UserResponse model
+- Authorization header properly processed
+
+*Note: Complete authentication flow now verified:
+1. User registration
+2. Login with credentials
+3. JWT token generation
+4. Protected endpoint access with token*
+
 ## Authentication Implementation Progress
 ### Email Validation Dependency Issue
 - Initial attempt to implement user registration failed
@@ -406,3 +434,79 @@ Verification Status:
      - Web container started
 
 *Note: This illustrates the importance of understanding Docker layer caching when adding new dependencies, and the need for --no-cache flag when updating requirements.*
+
+## Docker Network Configuration
+### Network Overview
+Current Docker networks:
+```
+NETWORK ID     NAME                       DRIVER    SCOPE
+2ce6ad2c96a2   bridge                     bridge    local
+569045d45cad   host                       host      local
+506346b9054b   language-voyager_default   bridge    local
+e21c62b5d502   none                       null      local
+```
+
+### Network Types and Usage
+1. **bridge** (default bridge network):
+   - Docker's default network driver
+   - Used for standalone containers
+   - Provides internal network isolation
+
+2. **host**:
+   - Removes network isolation
+   - Container uses host's network directly
+   - Higher performance but less secure
+
+3. **language-voyager_default**:
+   - Our project's custom bridge network
+   - Created automatically by Docker Compose
+   - Enables container-to-container communication
+   - Used by our PostgreSQL, Redis, and FastAPI services
+
+4. **none**:
+   - Complete network isolation
+   - No external network access
+   - Used for maximum security requirements
+
+### Request Routing Behavior
+Observed in API logs:
+```
+INFO:     172.18.0.1:51706 - "POST /auth/register HTTP/1.1" 200 OK
+INFO:     172.18.0.1:47976 - "POST /auth/token HTTP/1.1" 200 OK
+INFO:     172.18.0.1:34274 - "GET /auth/me HTTP/1.1" 200 OK
+```
+
+Request Flow:
+1. Host machine makes request to localhost:8000
+2. Docker routes through gateway (172.18.0.1)
+3. Request reaches FastAPI container
+4. Different ports (51706, 47976, 34274) are ephemeral ports from host machine
+5. Each new connection gets unique port number
+
+*Note: This network configuration ensures proper isolation while maintaining necessary communication between services.*
+
+## Environment Configuration Cleanup
+### Configuration File Consolidation
+- Removed duplicate .env from app/ directory
+- Consolidated all environment variables to root .env
+- Maintained comprehensive .env.example template with documentation
+- Verified docker-compose.yml using root .env file correctly
+
+### Environment Structure
+1. Development Configuration (.env):
+   - All necessary variables for development
+   - Debug mode enabled
+   - Development-specific URLs and endpoints
+
+2. Example Template (.env.example):
+   - Comprehensive documentation
+   - Production-ready defaults
+   - Clear comments for each variable
+   - Local and Docker configuration options
+
+3. Docker Integration:
+   - Using env_file directive in docker-compose.yml
+   - Container-specific URLs (db, redis hostnames)
+   - Health check configuration preserved
+
+*Note: Environment configuration consolidated and documented. All services verified working with unified configuration.*

@@ -8,11 +8,12 @@ from ..auth.utils import (
     authenticate_user,
     create_access_token,
     get_current_active_user,
-    get_password_hash,
-    ACCESS_TOKEN_EXPIRE_MINUTES
+    get_password_hash
 )
+from ..core.config import get_settings
 from pydantic import BaseModel, EmailStr
 
+settings = get_settings()
 router = APIRouter(
     prefix="/auth",
     tags=["authentication"]
@@ -71,7 +72,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
