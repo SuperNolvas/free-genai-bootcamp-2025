@@ -1036,3 +1036,57 @@ Current implementation carefully manages the following monthly limits:
 - Transactional DDL ensured atomic migration application
 
 *Note: Database schema now fully supports ArcGIS usage tracking with caching optimization and efficient querying capabilities.*
+
+## ArcGIS Integration Testing Status
+### Test Suite Implementation
+1. **Core Tests Implemented and Passing**:
+   - ✅ Credit usage tracking
+   - ✅ Cache hit/miss scenarios
+   - ✅ Monthly limit enforcement
+   - ✅ Daily credit limit validation  
+   - ✅ Usage alert thresholds
+   - ✅ Error handling
+
+2. **Test Coverage**:
+   - Mocked ArcGIS API responses
+   - Redis cache integration
+   - Credit limit validations
+   - Alert system thresholds
+   - Error scenarios
+
+3. **Testing Infrastructure**:
+   - Async test support with pytest-asyncio
+   - Proper async context manager mocking
+   - Database session management
+   - Redis cache mocking
+   - Transaction isolation
+
+### Integration Setup
+1. **Test Categories**:
+   - Unit tests with mocked responses
+   - Integration tests (marked with @pytest.mark.integration)
+   - Separated by pytest markers for selective execution
+
+2. **Mock Strategy**:
+   - HTTP responses mocked via aiohttp
+   - Cache responses mocked via Redis client
+   - Database operations using SQLite for tests
+   - Properly handled async context managers
+
+3. **Credit Management**:
+   - Accurate tracking of credit usage
+   - Cache hit optimization validation
+   - Proper enforcement of limits:
+     - Monthly operation limits
+     - Daily credit limits
+     - Alert thresholds (80%, 90%, 95%)
+
+### Test Execution Results
+- All core tests passing successfully
+- Proper async/await handling
+- Correct credit tracking
+- Accurate limit enforcement
+- Cache integration working
+- Error scenarios properly handled
+
+*Note: Integration tests separated from unit tests using pytest markers, allowing for selective test execution during development.*

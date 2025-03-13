@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -6,6 +6,7 @@ from .database.config import engine, get_db
 from .models import user, progress, content, arcgis_usage
 from .routers import auth, progress as progress_router, map
 from .core.config import get_settings
+from .services.arcgis import ArcGISService
 
 # Get settings instance
 settings = get_settings()
@@ -52,14 +53,36 @@ async def root():
 
 @app.get("/health")
 async def health_check(db: Session = Depends(get_db)):
-    try:
-        db.execute(text("SELECT 1"))
-        db_status = "healthy"
-    except Exception as e:
-        db_status = f"unhealthy: {str(e)}"
-    
-    return {
+    status = {
         "status": "online",
-        "database": db_status,
+        "database": "unhealthy",
+        "arcgis": "unchecked",
         "version": settings.API_V1_PREFIX.strip("/")
     }
+
+    try:
+        # Check database
+        db.execute(text("SELECT 1"))
+        status["database"] = "healthy"
+        
+        # Check ArcGIS if API key is configured
+        if settings.ARCGIS_API_KEY:
+            try:
+                arcgis_service = ArcGISService(db)
+                # Try a simple geocoding request
+                await arcgis_service.geocode_location("Tokyo Station, Japan")
+                status["arcgis"] = "healthy"
+            except Exception as e:
+                status["arcgis"] = f"unhealthy: {str(e)}"
+        else:
+            status["arcgis"] = "unconfigured"
+            
+    except Exception as e:
+        status["database"] = f"unhealthy: {str(e)}"
+    
+    if status["database"] != "healthy" or (
+        settings.ARCGIS_API_KEY and status["arcgis"] != "healthy"
+    ):
+        raise HTTPException(status_code=503, detail=status)
+    
+    return status

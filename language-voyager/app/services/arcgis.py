@@ -29,7 +29,8 @@ class ArcGISCredit:
 class ArcGISService:
     def __init__(self, db: Session):
         self.db = db
-        self.api_key = settings.ARCGIS_API_KEY
+        self.settings = get_settings()  # Store settings instance
+        self.api_key = self.settings.ARCGIS_API_KEY
         if not self.api_key:
             raise ValueError("ArcGIS API key is not configured")
 
@@ -65,25 +66,25 @@ class ArcGISService:
             logger.error(f"Failed to cache response: {str(e)}")
 
     async def _check_usage_limits(self, operation_type: str) -> Tuple[bool, float, str]:
-        """Check both daily credit and monthly operation limits"""
-        # Check daily credit limit
-        current_usage = ArcGISUsage.get_daily_usage(self.db)
-        operation_cost = ArcGISCredit.CREDIT_COSTS.get(operation_type, 0.04)
-        if current_usage + operation_cost > settings.ARCGIS_MAX_CREDITS_PER_DAY:
-            raise HTTPException(
-                status_code=429,
-                detail="Daily ArcGIS credit limit reached. Please try again tomorrow."
-            )
-
-        # Check monthly operation limit and get alert level
+        """Check both monthly operation limits and daily credit limits"""
+        # First check monthly operation limit
         within_limit, usage_percentage, alert_level = ArcGISUsage.check_monthly_limit(
             self.db, operation_type
         )
-
+        
         if not within_limit:
             raise HTTPException(
                 status_code=429,
                 detail=f"Monthly limit for {operation_type} operations reached. Please try again next month."
+            )
+
+        # Then check daily credit limit
+        current_usage = ArcGISUsage.get_daily_usage(self.db)
+        operation_cost = ArcGISCredit.CREDIT_COSTS.get(operation_type, 0.04)
+        if current_usage + operation_cost > self.settings.ARCGIS_MAX_CREDITS_PER_DAY:
+            raise HTTPException(
+                status_code=429,
+                detail="Daily ArcGIS credit limit reached. Please try again tomorrow."
             )
 
         # Log alerts based on threshold
@@ -129,14 +130,17 @@ class ArcGISService:
 
         # Make request
         params['token'] = self.api_key
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://www.arcgis.com/sharing/rest/{endpoint}", params=params) as response:
-                if response.status != 200:
-                    raise HTTPException(
-                        status_code=response.status,
-                        detail="ArcGIS API request failed"
-                    )
-                result = await response.json()
+        session = aiohttp.ClientSession()
+        try:
+            response = await session.get(f"https://www.arcgis.com/sharing/rest/{endpoint}", params=params)
+            if response.status != 200:
+                raise HTTPException(
+                    status_code=response.status,
+                    detail="ArcGIS API request failed"
+                )
+            result = await response.json()
+        finally:
+            await session.close()
 
         # Log credit usage and cache response
         self._log_usage(operation_type)

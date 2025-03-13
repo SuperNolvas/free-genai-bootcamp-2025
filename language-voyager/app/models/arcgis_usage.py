@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Float, DateTime, String, Boolean, func, Index, cast
+from sqlalchemy import Column, Integer, Float, DateTime, String, Boolean, func, Index, cast, text
 from ..database.config import Base
 from datetime import datetime, timedelta
 
@@ -47,7 +47,14 @@ class ArcGISUsage(Base):
     @classmethod
     def get_monthly_usage(cls, db, operation_type: str = None) -> dict:
         """Get usage count for the current month by operation type"""
-        start_of_month = func.date_trunc('month', func.current_date())
+        # Use database-agnostic date truncation
+        if db.bind.dialect.name == 'sqlite':
+            # SQLite date truncation using strftime
+            start_of_month = text("date(CURRENT_DATE, 'start of month')")
+        else:
+            # PostgreSQL date_trunc
+            start_of_month = func.date_trunc('month', func.current_date())
+
         query = db.query(
             cls.operation_type,
             func.count().label('count'),
