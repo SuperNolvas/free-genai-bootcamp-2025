@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Float, DateTime, String, Boolean, func, Index
+from sqlalchemy import Column, Integer, Float, DateTime, String, Boolean, func, Index, cast
 from ..database.config import Base
 from datetime import datetime, timedelta
 
@@ -52,7 +52,7 @@ class ArcGISUsage(Base):
             cls.operation_type,
             func.count().label('count'),
             func.sum(cls.credits_used).label('credits'),
-            func.sum(cls.cached.cast(Integer)).label('cache_hits')
+            func.sum(cast(cls.cached, Integer)).label('cache_hits')
         ).filter(cls.timestamp >= start_of_month)
         
         if operation_type:
