@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.coverage
+htmlcov/
+.tox/
+.pytest_cache/
+
+# Docker
+.docker/
+
+# Database
+*.sqlite3
+*.db
+
+# Logs
+*.log
+logs/
+
+# ArcGIS specific
+arcgis_cache/
+*.mmpk
+*.tpk
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Redis
+dump.rdb
+
+# PostgreSQL
+*.psql
+*.backup
+*.sql
+*.dump
+
+# System
+.DS_Store
+Thumbs.db
