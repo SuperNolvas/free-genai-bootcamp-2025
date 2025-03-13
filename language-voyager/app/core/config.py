@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     
     # ArcGIS
     ARCGIS_API_KEY: str | None = None
+    ARCGIS_MAX_CREDITS_PER_DAY: float = 10.0  # Conservative daily limit
+    ARCGIS_CACHE_DURATION: int = 24 * 60 * 60  # Cache responses for 24 hours
+    ARCGIS_FEATURE_LIMIT: int = 100  # Limit features per request
     
     model_config = ConfigDict(
         env_file=".env",

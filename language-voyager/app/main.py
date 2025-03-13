@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from .database.config import engine, get_db
-from .models import user, progress, content
-from .routers import auth, progress as progress_router
+from .models import user, progress, content, arcgis_usage
+from .routers import auth, progress as progress_router, map
 from .core.config import get_settings
 
 # Get settings instance
@@ -14,6 +14,7 @@ settings = get_settings()
 user.Base.metadata.create_all(bind=engine)
 progress.Base.metadata.create_all(bind=engine)
 content.Base.metadata.create_all(bind=engine)
+arcgis_usage.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -37,6 +38,11 @@ app.include_router(
 
 app.include_router(
     progress_router.router,
+    prefix=settings.API_V1_PREFIX
+)
+
+app.include_router(
+    map.router,
     prefix=settings.API_V1_PREFIX
 )
 
