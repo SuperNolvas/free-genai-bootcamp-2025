@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
+from sqlalchemy.orm.attributes import flag_modified
+from datetime import datetime
 from typing import List
 
 from ..database.config import get_db
@@ -89,26 +91,38 @@ async def update_progress(
             proficiency_level=update.score,
             completed_challenges=[update.metadata] if update.metadata else [],
             vocabulary_mastered={},
-            last_location=""
+            last_location="",
+            updated_at=datetime.utcnow()
         )
         db.add(progress)
     else:
         # Update existing progress
         progress.proficiency_level = (progress.proficiency_level + update.score) / 2
         if update.metadata:
-            # Initialize completed_challenges if None or not a list
-            if not progress.completed_challenges or not isinstance(progress.completed_challenges, list):
+            # Initialize completed_challenges if None
+            if progress.completed_challenges is None:
                 progress.completed_challenges = []
-            # Only append if the challenge ID isn't already in the list
-            challenge_ids = [c.get("id") for c in progress.completed_challenges if isinstance(c, dict) and "id" in c]
-            if update.metadata.get("id") not in challenge_ids:
-                progress.completed_challenges.append(update.metadata)
-    
-    # Force update of updated_at timestamp for SQLite compatibility
-    progress.updated_at = func.now()
+            elif not isinstance(progress.completed_challenges, list):
+                progress.completed_challenges = []
+            
+            # Check if challenge already exists
+            existing_challenge_ids = [c.get("id") for c in progress.completed_challenges if isinstance(c, dict) and "id" in c]
+            if update.metadata.get("id") not in existing_challenge_ids:
+                # Create a new list to ensure SQLAlchemy detects the change
+                new_challenges = progress.completed_challenges.copy()
+                new_challenges.append(update.metadata)
+                progress.completed_challenges = new_challenges
+                # Flag the JSON field as modified
+                flag_modified(progress, "completed_challenges")
+        
+        # Update timestamp
+        progress.updated_at = datetime.utcnow()
     
     db.commit()
     db.refresh(progress)
+    
+    # Extract challenge IDs for response
+    challenge_ids = [c.get("id") for c in progress.completed_challenges if isinstance(c, dict) and "id" in c]
     
     return ResponseModel(
         success=True,
@@ -117,9 +131,9 @@ async def update_progress(
             language=progress.language,
             region=progress.region,
             proficiency_level=progress.proficiency_level,
-            completed_challenges=[c.get("id") for c in progress.completed_challenges if isinstance(c, dict) and "id" in c],
+            completed_challenges=challenge_ids,
             achievements=[],  # Will be implemented with achievement system
-            last_activity=progress.created_at if progress.updated_at is None else progress.updated_at
+            last_activity=progress.updated_at or progress.created_at
         )
     )
 

@@ -11,7 +11,7 @@ from ..auth.utils import (
     get_password_hash
 )
 from ..core.config import get_settings
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 
 settings = get_settings()
 router = APIRouter(
@@ -33,9 +33,8 @@ class UserResponse(BaseModel):
     email: str
     username: str
     is_active: bool
-
-    class Config:
-        from_attributes = True
+    
+    model_config = ConfigDict(from_attributes=True)
 
 @router.post("/register", response_model=UserResponse)
 async def register(user_data: UserCreate, db: Session = Depends(get_db)):

@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 from typing import List
 from functools import lru_cache
+from pydantic import ConfigDict
 
 class Settings(BaseSettings):
     # Environment
@@ -28,10 +29,11 @@ class Settings(BaseSettings):
     # ArcGIS
     ARCGIS_API_KEY: str | None = None
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-        extra = "allow"  # Allow extra fields in environment
+    model_config = ConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="allow"  # Allow extra fields in environment
+    )
 
 @lru_cache()
 def get_settings() -> Settings:
