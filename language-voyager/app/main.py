@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from .database.config import engine, get_db
 from .models import user, progress, content
-from .routers import auth
+from .routers import auth, progress as progress_router
 from .core.config import get_settings
 
 # Get settings instance
@@ -32,6 +32,11 @@ app.add_middleware(
 # Include routers
 app.include_router(
     auth.router,
+    prefix=settings.API_V1_PREFIX
+)
+
+app.include_router(
+    progress_router.router,
     prefix=settings.API_V1_PREFIX
 )
 
