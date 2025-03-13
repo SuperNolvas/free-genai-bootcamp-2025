@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import func
 from typing import List
 
 from ..database.config import get_db
@@ -95,7 +96,16 @@ async def update_progress(
         # Update existing progress
         progress.proficiency_level = (progress.proficiency_level + update.score) / 2
         if update.metadata:
-            progress.completed_challenges.append(update.metadata)
+            # Initialize completed_challenges if None or not a list
+            if not progress.completed_challenges or not isinstance(progress.completed_challenges, list):
+                progress.completed_challenges = []
+            # Only append if the challenge ID isn't already in the list
+            challenge_ids = [c.get("id") for c in progress.completed_challenges if isinstance(c, dict) and "id" in c]
+            if update.metadata.get("id") not in challenge_ids:
+                progress.completed_challenges.append(update.metadata)
+    
+    # Force update of updated_at timestamp for SQLite compatibility
+    progress.updated_at = func.now()
     
     db.commit()
     db.refresh(progress)
@@ -107,7 +117,7 @@ async def update_progress(
             language=progress.language,
             region=progress.region,
             proficiency_level=progress.proficiency_level,
-            completed_challenges=[c["id"] for c in progress.completed_challenges if "id" in c],
+            completed_challenges=[c.get("id") for c in progress.completed_challenges if isinstance(c, dict) and "id" in c],
             achievements=[],  # Will be implemented with achievement system
             last_activity=progress.created_at if progress.updated_at is None else progress.updated_at
         )
