@@ -2,14 +2,17 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 import aiohttp
 import json
-from typing import Dict, Any, Optional, List
+import logging
+from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 import redis
+import hashlib
 from ..core.config import get_settings
 from ..models.arcgis_usage import ArcGISUsage
 
 settings = get_settings()
 redis_client = redis.from_url(settings.REDIS_URL)
+logger = logging.getLogger(__name__)
 
 class ArcGISCredit:
     # Credit costs per operation (based on ArcGIS documentation)
@@ -17,7 +20,10 @@ class ArcGISCredit:
         'geocoding': 0.04,
         'routing': 0.005,
         'tile_request': 0.001,
-        'feature_request': 0.002
+        'feature_request': 0.002,
+        'place_search': 0.04,
+        'place_details': 0.04,
+        'elevation': 0.001
     }
 
 class ArcGISService:
@@ -27,48 +33,99 @@ class ArcGISService:
         if not self.api_key:
             raise ValueError("ArcGIS API key is not configured")
 
-    async def _check_credit_limit(self, operation_type: str) -> bool:
-        """Check if operation would exceed daily credit limit"""
-        current_usage = ArcGISUsage.get_daily_usage(self.db)
-        operation_cost = ArcGISCredit.CREDIT_COSTS.get(operation_type, 0.04)  # Default to highest cost
-        return current_usage + operation_cost <= settings.ARCGIS_MAX_CREDITS_PER_DAY
-
-    def _log_credit_usage(self, operation_type: str):
-        """Log credit usage to database"""
-        usage = ArcGISUsage(
-            operation_type=operation_type,
-            credits_used=ArcGISCredit.CREDIT_COSTS.get(operation_type, 0.04)
-        )
-        self.db.add(usage)
-        self.db.commit()
+    def _generate_cache_key(self, endpoint: str, params: Dict[str, Any]) -> str:
+        """Generate a unique cache key for a request"""
+        # Sort params to ensure consistent key generation
+        param_str = json.dumps(params, sort_keys=True)
+        # Create hash of endpoint and parameters
+        return f"arcgis:{endpoint}:{hashlib.sha256(param_str.encode()).hexdigest()}"
 
     async def _get_cached_response(self, cache_key: str) -> Optional[Dict]:
         """Get cached response if available"""
         cached = redis_client.get(cache_key)
-        return json.loads(cached) if cached else None
+        if cached:
+            try:
+                return json.loads(cached)
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid JSON in cache for key {cache_key}")
+                redis_client.delete(cache_key)
+        return None
 
-    async def _cache_response(self, cache_key: str, response: Dict):
+    async def _cache_response(self, cache_key: str, response: Dict, ttl: int = None):
         """Cache response with expiration"""
-        redis_client.setex(
-            cache_key,
-            settings.ARCGIS_CACHE_DURATION,
-            json.dumps(response)
-        )
+        if ttl is None:
+            ttl = settings.ARCGIS_CACHE_DURATION
+        try:
+            redis_client.setex(
+                cache_key,
+                ttl,
+                json.dumps(response)
+            )
+        except (redis.RedisError, json.JSONDecodeError) as e:
+            logger.error(f"Failed to cache response: {str(e)}")
 
-    async def _make_request(self, endpoint: str, params: Dict[str, Any], operation_type: str) -> Dict:
-        """Make an ArcGIS API request with credit management"""
-        # Check cache first
-        cache_key = f"arcgis:{endpoint}:{json.dumps(params, sort_keys=True)}"
-        cached_response = await self._get_cached_response(cache_key)
-        if cached_response:
-            return cached_response
-
-        # Check credit limit
-        if not await self._check_credit_limit(operation_type):
+    async def _check_usage_limits(self, operation_type: str) -> Tuple[bool, float, str]:
+        """Check both daily credit and monthly operation limits"""
+        # Check daily credit limit
+        current_usage = ArcGISUsage.get_daily_usage(self.db)
+        operation_cost = ArcGISCredit.CREDIT_COSTS.get(operation_type, 0.04)
+        if current_usage + operation_cost > settings.ARCGIS_MAX_CREDITS_PER_DAY:
             raise HTTPException(
                 status_code=429,
                 detail="Daily ArcGIS credit limit reached. Please try again tomorrow."
             )
+
+        # Check monthly operation limit and get alert level
+        within_limit, usage_percentage, alert_level = ArcGISUsage.check_monthly_limit(
+            self.db, operation_type
+        )
+
+        if not within_limit:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Monthly limit for {operation_type} operations reached. Please try again next month."
+            )
+
+        # Log alerts based on threshold
+        if alert_level:
+            logger.warning(
+                f"ArcGIS {operation_type} usage alert: {alert_level.upper()} - "
+                f"{usage_percentage:.1f}% of monthly limit"
+            )
+            # Cache the alert to prevent spam
+            alert_key = f"arcgis:alert:{operation_type}:{datetime.now().strftime('%Y-%m')}"
+            if not redis_client.exists(alert_key):
+                redis_client.setex(alert_key, 86400, json.dumps({
+                    'level': alert_level,
+                    'percentage': usage_percentage
+                }))
+
+        return within_limit, usage_percentage, alert_level
+
+    def _log_usage(self, operation_type: str, cached: bool = False, request_path: str = None):
+        """Log credit usage to database"""
+        usage = ArcGISUsage(
+            operation_type=operation_type,
+            credits_used=ArcGISCredit.CREDIT_COSTS.get(operation_type, 0.04),
+            cached=cached,
+            request_path=request_path
+        )
+        self.db.add(usage)
+        self.db.commit()
+
+    async def _make_request(self, endpoint: str, params: Dict[str, Any], operation_type: str) -> Dict:
+        """Make an ArcGIS API request with credit and quota management"""
+        # Generate cache key
+        cache_key = self._generate_cache_key(endpoint, params)
+        
+        # Check cache first
+        cached_response = await self._get_cached_response(cache_key)
+        if cached_response:
+            self._log_usage(operation_type, cached=True, request_path=endpoint)
+            return cached_response
+
+        # Check usage limits
+        within_limit, usage_percentage, alert_level = await self._check_usage_limits(operation_type)
 
         # Make request
         params['token'] = self.api_key
@@ -82,8 +139,9 @@ class ArcGISService:
                 result = await response.json()
 
         # Log credit usage and cache response
-        self._log_credit_usage(operation_type)
+        self._log_usage(operation_type)
         await self._cache_response(cache_key, result)
+
         return result
 
     async def get_map_features(self, region: str, feature_type: str) -> Dict:
