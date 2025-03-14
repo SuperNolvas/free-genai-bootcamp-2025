@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 from functools import lru_cache
 from pydantic import ConfigDict
 
@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     ARCGIS_CACHE_DURATION: int = 24 * 60 * 60  # Cache responses for 24 hours
     ARCGIS_FEATURE_LIMIT: int = 100  # Limit features per request
     
+    # OpenRouter settings
+    OPENROUTER_API_KEY: Optional[str] = None
+    OPENROUTER_DEFAULT_MODEL: Optional[str] = None  # e.g. "mistralai/mistral-7b" or "anthropic/claude-2"
+
     model_config = ConfigDict(
         env_file=".env",
         case_sensitive=True,

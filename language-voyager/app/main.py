@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from .database.config import engine, get_db
 from .models import user, progress, content, arcgis_usage
-from .routers import auth, progress as progress_router, map
+from .routers import auth, progress as progress_router, map, conversation
 from .core.config import get_settings
 from .services.arcgis import ArcGISService
 
@@ -44,6 +44,11 @@ app.include_router(
 
 app.include_router(
     map.router,
+    prefix=settings.API_V1_PREFIX
+)
+
+app.include_router(
+    conversation.router,
     prefix=settings.API_V1_PREFIX
 )
 
