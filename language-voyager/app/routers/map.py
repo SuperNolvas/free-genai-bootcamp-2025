@@ -6,8 +6,9 @@ from ..services.arcgis import ArcGISService
 from ..auth.utils import get_current_active_user
 from ..models.user import User
 from ..models.region import Region
+from ..models.poi import PointOfInterest
 from ..models.progress import UserProgress
-from .schemas.map import Region as RegionSchema
+from .schemas.map import Region as RegionSchema, POIResponse, POICreate, POIUpdate
 from ..core.schemas import ResponseModel
 
 router = APIRouter(
@@ -84,17 +85,30 @@ async def list_available_regions(
         data=region_responses
     )
 
-@router.get("/region/{region_id}/pois")
+@router.get("/region/{region_id}/pois", response_model=ResponseModel[List[POIResponse]])
 async def get_region_pois(
     region_id: str,
     poi_type: str = Query(None, description="Type of POI to filter by"),
-    service: ArcGISService = Depends(get_arcgis_service)
-) -> Dict:
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> ResponseModel[List[POIResponse]]:
     """Get points of interest for a specific region, with optional type filtering"""
-    params = {"region": region_id}
+    # Verify region exists and is accessible
+    region = db.query(Region).filter(Region.id == region_id).first()
+    if not region:
+        raise HTTPException(status_code=404, detail="Region not found")
+    
+    # Build query
+    query = db.query(PointOfInterest).filter(PointOfInterest.region_id == region_id)
     if poi_type:
-        params["type"] = poi_type
-    return await service.get_map_features(region_id, "poi")
+        query = query.filter(PointOfInterest.poi_type == poi_type)
+    
+    pois = query.all()
+    return ResponseModel(
+        success=True,
+        message=f"Retrieved {len(pois)} POIs for region {region_id}",
+        data=pois
+    )
 
 @router.get("/location/search")
 async def search_location(
@@ -153,12 +167,87 @@ async def get_map_layers(
     """Get available map layers for a region"""
     return await service.get_region_layers(region_id)
 
-@router.get("/pois/nearby")
+@router.get("/pois/nearby", response_model=ResponseModel[List[POIResponse]])
 async def get_nearby_points_of_interest(
     lat: float,
     lon: float,
     radius: float = Query(1000, description="Search radius in meters"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
     service: ArcGISService = Depends(get_arcgis_service)
-) -> Dict:
+) -> ResponseModel[List[POIResponse]]:
     """Get POIs within specified radius of a point"""
-    return await service.get_nearby_pois(lat, lon, radius)
+    # Use ArcGIS to find POIs within radius
+    nearby = await service.get_nearby_pois(lat, lon, radius)
+    
+    # Get POI IDs from ArcGIS response
+    poi_ids = [feature["id"] for feature in nearby.get("features", [])]
+    
+    # Fetch full POI details from database
+    pois = db.query(PointOfInterest).filter(PointOfInterest.id.in_(poi_ids)).all()
+    
+    return ResponseModel(
+        success=True,
+        message=f"Found {len(pois)} POIs within {radius}m",
+        data=pois
+    )
+
+@router.post("/pois", response_model=ResponseModel[POIResponse])
+async def create_poi(
+    poi: POICreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+    service: ArcGISService = Depends(get_arcgis_service)
+) -> ResponseModel[POIResponse]:
+    """Create a new POI. Admin only."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized to create POIs")
+    
+    # Verify region exists
+    region = db.query(Region).filter(Region.id == poi.region_id).first()
+    if not region:
+        raise HTTPException(status_code=404, detail="Region not found")
+    
+    # Create POI
+    db_poi = PointOfInterest(**poi.model_dump(exclude_unset=True))
+    db.add(db_poi)
+    db.commit()
+    db.refresh(db_poi)
+    
+    # Update region POI count
+    region.total_pois += 1
+    db.commit()
+    
+    return ResponseModel(
+        success=True,
+        message="POI created successfully",
+        data=db_poi
+    )
+
+@router.patch("/pois/{poi_id}", response_model=ResponseModel[POIResponse])
+async def update_poi(
+    poi_id: str,
+    poi_update: POIUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> ResponseModel[POIResponse]:
+    """Update a POI. Admin only."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized to update POIs")
+    
+    db_poi = db.query(PointOfInterest).filter(PointOfInterest.id == poi_id).first()
+    if not db_poi:
+        raise HTTPException(status_code=404, detail="POI not found")
+    
+    # Update POI fields
+    for field, value in poi_update.model_dump(exclude_unset=True).items():
+        setattr(db_poi, field, value)
+    
+    db.commit()
+    db.refresh(db_poi)
+    
+    return ResponseModel(
+        success=True,
+        message="POI updated successfully",
+        data=db_poi
+    )
