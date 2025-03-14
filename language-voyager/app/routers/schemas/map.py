@@ -60,25 +60,46 @@ class POIUpdate(BaseModel):
     content_ids: Optional[List[str]] = None
     metadata: Optional[Dict] = None
 
+class ContentItem(BaseModel):
+    id: str
+    content: Dict
+    completed: bool = False
+    mastery_level: float = 0
+    difficulty_level: float
+
+class LocalContext(BaseModel):
+    dialect: str
+    formality_level: str
+    region_specific_customs: Dict
+    visit_count: int
+    difficulty_factors: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Breakdown of factors affecting content difficulty"
+    )
+    difficulty_progression: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Projected difficulty levels for next visits"
+    )
+
 class ContentDeliveryResponse(BaseModel):
-    vocabulary: List[Dict] = Field(
+    vocabulary: List[ContentItem] = Field(
         default_factory=list,
         description="Relevant vocabulary items for this POI"
     )
-    phrases: List[Dict] = Field(
+    phrases: List[ContentItem] = Field(
         default_factory=list,
         description="Useful phrases for this POI context"
     )
-    dialogues: List[Dict] = Field(
+    dialogues: List[ContentItem] = Field(
         default_factory=list,
         description="Practice dialogues for this POI context"
     )
-    cultural_notes: List[Dict] = Field(
+    cultural_notes: List[ContentItem] = Field(
         default_factory=list,
         description="Cultural information relevant to this POI"
     )
     difficulty_level: float = Field(..., ge=0, le=100)
-    local_context: Dict = Field(
+    local_context: LocalContext = Field(
         default_factory=dict,
         description="Local context information like dialect, formality level"
     )

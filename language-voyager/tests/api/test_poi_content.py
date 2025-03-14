@@ -299,3 +299,202 @@ async def test_achievement_unlocking(async_client, test_user, test_poi, test_con
     
     assert len(progress.achievements) > 0
     assert progress.poi_progress[test_poi.id]["visits"] == 5
+
+@pytest.mark.asyncio
+async def test_content_difficulty_progression(async_client, test_user, test_poi, test_content, test_db: Session):
+    """Test the content difficulty progression system"""
+    # Login and setup
+    response = await async_client.post("/api/v1/auth/token", data={
+        "username": test_user.email,
+        "password": "testpass123"
+    })
+    token = response.json()["access_token"]
+    
+    # Create progress with some existing mastery
+    progress = UserProgress(
+        user_id=test_user.id,
+        language="ja",
+        region=test_poi.region_id,
+        proficiency_level=50,
+        poi_progress={
+            test_poi.id: {
+                "visits": 3,
+                "completed_content": ["vocab_1"],
+                "total_time": 900,
+                "last_visit": str(datetime.utcnow())
+            }
+        },
+        content_mastery={
+            "vocabulary": {"vocab_1": 85}
+        },
+        achievements=[]
+    )
+    test_db.add(progress)
+    test_db.commit()
+
+    # Get POI content to check difficulty progression
+    response = await async_client.get(
+        f"/api/v1/map/pois/{test_poi.id}/content",
+        params={"language": "ja", "proficiency_level": 50},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+
+    # Verify difficulty factors
+    factors = data["local_context"]["difficulty_factors"]
+    assert "base_difficulty" in factors
+    assert "mastery_factor" in factors
+    assert "visit_factor" in factors
+    
+    # Verify base difficulty matches POI
+    assert factors["base_difficulty"] == test_poi.difficulty_level
+    
+    # Verify mastery factor (30% max increase)
+    mastery_factor = factors["mastery_factor"]
+    assert 0 <= mastery_factor <= 0.3
+    assert mastery_factor == pytest.approx((85/100) * 0.3, rel=0.01)
+
+    # Verify visit factor (20% max increase)
+    visit_factor = factors["visit_factor"]
+    assert 0 <= visit_factor <= 0.2
+    assert visit_factor == pytest.approx((3/10) * 0.2, rel=0.01)
+
+    # Verify difficulty progression
+    progression = data["local_context"]["difficulty_progression"]
+    assert len(progression) == 5  # Next 5 visits
+    
+    # Verify progression increases with visits but stays within bounds
+    base_difficulty = test_poi.difficulty_level
+    previous = None
+    for visit_num in range(4, 9):  # Visits 4-8
+        visit_key = f"visit_{visit_num}"
+        assert visit_key in progression
+        current = progression[visit_key]
+        
+        # Verify difficulty is within ±20% of base
+        max_difficulty = base_difficulty * 1.2
+        assert current <= max_difficulty
+        
+        # Verify progressive increase
+        if previous is not None:
+            assert current >= previous
+        previous = current
+
+@pytest.mark.asyncio
+async def test_content_recommendation(async_client, test_user, test_poi, test_content, test_db: Session):
+    """Test the content recommendation system"""
+    # Login and setup
+    response = await async_client.post("/api/v1/auth/token", data={
+        "username": test_user.email,
+        "password": "testpass123"
+    })
+    token = response.json()["access_token"]
+    
+    # Create progress with some mastered content
+    progress = UserProgress(
+        user_id=test_user.id,
+        language="ja",
+        region=test_poi.region_id,
+        proficiency_level=50,
+        poi_progress={
+            test_poi.id: {
+                "visits": 2,
+                "completed_content": ["vocab_1"],
+                "total_time": 600,
+                "last_visit": str(datetime.utcnow())
+            }
+        },
+        content_mastery={
+            "vocabulary": {"vocab_1": 100}  # Fully mastered
+        },
+        achievements=[]
+    )
+    test_db.add(progress)
+    test_db.commit()
+
+    # Get POI content
+    response = await async_client.get(
+        f"/api/v1/map/pois/{test_poi.id}/content",
+        params={"language": "ja", "proficiency_level": 50},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+
+    # Verify content filtering
+    vocab_items = data["vocabulary"]
+    for item in vocab_items:
+        # Already mastered content should be marked as completed
+        if item["id"] == "vocab_1":
+            assert item["completed"] == True
+            assert item["mastery_level"] == 100
+        else:
+            assert item["completed"] == False
+            assert item["mastery_level"] == 0
+
+        # Verify difficulty is appropriate (within ±20% of user level)
+        assert abs(item["difficulty_level"] - 50) <= 10  # ±20% of 50
+
+    # Verify POI context is included
+    assert data["local_context"]["dialect"] == "tokyo"
+    assert "formality_level" in data["local_context"]
+    assert "region_specific_customs" in data["local_context"]
+
+@pytest.mark.asyncio
+async def test_difficulty_adaptation(async_client, test_user, test_poi, test_content, test_db: Session):
+    """Test how content difficulty adapts based on user progress"""
+    # Login and setup
+    response = await async_client.post("/api/v1/auth/token", data={
+        "username": test_user.email,
+        "password": "testpass123"
+    })
+    token = response.json()["access_token"]
+
+    # Initial request with no progress
+    response = await async_client.get(
+        f"/api/v1/map/pois/{test_poi.id}/content",
+        params={"language": "ja", "proficiency_level": 50},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    initial_difficulty = response.json()["data"]["difficulty_level"]
+
+    # Create progress with high mastery
+    progress = UserProgress(
+        user_id=test_user.id,
+        language="ja",
+        region=test_poi.region_id,
+        proficiency_level=50,
+        poi_progress={
+            test_poi.id: {
+                "visits": 5,
+                "completed_content": ["vocab_1", "phrase_1"],
+                "total_time": 1500,
+                "last_visit": str(datetime.utcnow())
+            }
+        },
+        content_mastery={
+            "vocabulary": {"vocab_1": 90},
+            "phrase": {"phrase_1": 85}
+        },
+        achievements=[]
+    )
+    test_db.add(progress)
+    test_db.commit()
+
+    # Get content after progress
+    response = await async_client.get(
+        f"/api/v1/map/pois/{test_poi.id}/content",
+        params={"language": "ja", "proficiency_level": 50},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    adapted_difficulty = response.json()["data"]["difficulty_level"]
+
+    # Verify difficulty increased but within limits
+    assert adapted_difficulty > initial_difficulty
+    assert adapted_difficulty <= initial_difficulty * 1.5  # Max 50% increase
+
+    # Verify difficulty factors
+    factors = response.json()["data"]["local_context"]["difficulty_factors"]
+    assert factors["mastery_factor"] > 0  # Should have positive mastery impact
+    assert factors["visit_factor"] > 0  # Should have positive visit impact

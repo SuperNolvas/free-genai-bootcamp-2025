@@ -13,6 +13,7 @@ from ..models.content import LanguageContent, ContentType
 from .schemas.map import Region as RegionSchema, POIResponse, POICreate, POIUpdate, ContentDeliveryResponse
 from ..core.schemas import ResponseModel
 from ..services.cache import cache
+from ..services.recommendation import ContentRecommender
 
 router = APIRouter(
     prefix="/map",
@@ -260,12 +261,14 @@ async def get_poi_content(
     poi_id: str,
     language: str = Query(..., description="Language code (e.g., 'ja' for Japanese)"),
     proficiency_level: float = Query(..., ge=0, le=100, description="User's proficiency level"),
+    content_type: Optional[str] = Query(None, description="Optional content type filter"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> ResponseModel[ContentDeliveryResponse]:
     """Get language learning content for a specific POI."""
     # Try to get from cache first
-    cached_content = await cache.get_poi_content(poi_id, language, proficiency_level)
+    cache_key = f"{poi_id}:{language}:{proficiency_level}:{content_type}"
+    cached_content = await cache.get_poi_content(cache_key)
     if cached_content:
         return ResponseModel(
             success=True,
@@ -283,14 +286,13 @@ async def get_poi_content(
     if not region:
         raise HTTPException(status_code=404, detail="Region not found")
 
-    # Get user's progress for this POI
+    # Get or initialize user progress
     progress = db.query(UserProgress).filter(
         UserProgress.user_id == current_user.id,
         UserProgress.language == language,
         UserProgress.region == region.id
     ).first()
 
-    # Initialize progress if not exists
     if not progress:
         progress = UserProgress(
             user_id=current_user.id,
@@ -304,59 +306,87 @@ async def get_poi_content(
         db.add(progress)
         db.commit()
 
-    # Query content based on POI context and user's level
-    base_query = db.query(LanguageContent).filter(
-        LanguageContent.language == language,
-        LanguageContent.region == region.id,
-        LanguageContent.difficulty_level <= proficiency_level + 10
-    )
-
-    # Get all content types with proper progress tracking
-    content_types = {
-        ContentType.VOCABULARY: "vocabulary",
-        ContentType.PHRASE: "phrases",
-        ContentType.DIALOGUE: "dialogues",
-        ContentType.CULTURAL_NOTE: "cultural_notes"
-    }
-    
+    # Get recommended content for each type
     content_results = {}
-    for content_type, result_key in content_types.items():
-        items = base_query.filter(
-            LanguageContent.content_type == content_type,
-            LanguageContent.context_tags.contains([poi.poi_type])
-        ).all()
-        
-        # Track what content has been completed
-        completed_items = progress.content_mastery.get(result_key, {})
-        content_results[result_key] = [
+    content_types = [content_type] if content_type else [
+        ContentType.VOCABULARY,
+        ContentType.PHRASE,
+        ContentType.DIALOGUE,
+        ContentType.CULTURAL_NOTE
+    ]
+
+    for ct in content_types:
+        recommendations = ContentRecommender.get_recommended_content(
+            db=db,
+            user_progress=progress,
+            poi=poi,
+            content_type=ct,
+            limit=5
+        )
+        content_results[ct] = [
             {
-                **content.content,
-                "completed": content.id in completed_items,
-                "mastery_level": completed_items.get(content.id, 0)
+                **content,
+                "completed": content["id"] in progress.content_mastery.get(ct, {}),
+                "mastery_level": progress.content_mastery.get(ct, {}).get(content["id"], 0)
             }
-            for content in items
+            for content in recommendations
         ]
 
-    # Determine local context with dialect and customs
+    # Calculate visit-based metrics
+    visit_count = progress.poi_progress.get(poi_id, {}).get("visits", 0)
+    avg_mastery = 0
+    if any(content_results.values()):
+        all_mastery = []
+        for content_type_results in content_results.values():
+            all_mastery.extend([item["mastery_level"] for item in content_type_results])
+        avg_mastery = sum(all_mastery) / len(all_mastery) if all_mastery else 0
+
+    # Calculate current difficulty and factors
+    current_difficulty = ContentRecommender.calculate_content_difficulty(
+        poi.difficulty_level,
+        avg_mastery,
+        visit_count
+    )
+
+    # Calculate difficulty factors
+    difficulty_factors = {
+        "base_difficulty": poi.difficulty_level,
+        "mastery_factor": (avg_mastery / 100) * 0.3,
+        "visit_factor": min((visit_count / 10) * 0.2, 0.2)
+    }
+
+    # Project future difficulty progression
+    difficulty_progression = {}
+    for future_visit in range(visit_count + 1, visit_count + 6):  # Next 5 visits
+        projected_difficulty = ContentRecommender.calculate_content_difficulty(
+            poi.difficulty_level,
+            avg_mastery,
+            future_visit
+        )
+        difficulty_progression[f"visit_{future_visit}"] = projected_difficulty
+
+    # Determine local context with enhanced difficulty info
     local_context = {
         "dialect": region.metadata.get("dialect", "standard"),
         "formality_level": _determine_formality_level(poi.poi_type),
         "region_specific_customs": region.metadata.get("customs", {}),
-        "visit_count": progress.poi_progress.get(poi_id, {}).get("visits", 0)
+        "visit_count": visit_count,
+        "difficulty_factors": difficulty_factors,
+        "difficulty_progression": difficulty_progression
     }
 
     # Create response
     response = ContentDeliveryResponse(
-        vocabulary=content_results["vocabulary"],
-        phrases=content_results["phrases"],
-        dialogues=content_results["dialogues"],
-        cultural_notes=content_results["cultural_notes"],
-        difficulty_level=poi.difficulty_level,
+        vocabulary=content_results.get(ContentType.VOCABULARY, []),
+        phrases=content_results.get(ContentType.PHRASE, []),
+        dialogues=content_results.get(ContentType.DIALOGUE, []),
+        cultural_notes=content_results.get(ContentType.CULTURAL_NOTE, []),
+        difficulty_level=current_difficulty,
         local_context=local_context
     )
 
     # Cache the response
-    await cache.set_poi_content(poi_id, language, proficiency_level, response.model_dump())
+    await cache.set_poi_content(cache_key, response.model_dump())
 
     # Update POI visit count
     if not progress.poi_progress.get(poi_id):
