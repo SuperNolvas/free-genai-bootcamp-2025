@@ -23,3 +23,12 @@ class LanguageContent(Base):
     vector_embedding = Column(JSON, nullable=True)  # For semantic search
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    def to_dict(self) -> dict:
+        """Convert the content to a dictionary format matching ContentItem schema"""
+        return {
+            "id": self.id,
+            "content": self.content,
+            "difficulty_level": self.difficulty_level,
+            "content_type": self.content_type
+        }

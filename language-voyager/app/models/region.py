@@ -13,6 +13,7 @@ class Region(Base):
     center = Column(JSON, nullable=False)     # Center coordinates
     difficulty_level = Column(Float, nullable=False)
     requirements = Column(JSON)               # Requirements to unlock region
+    region_metadata = Column(JSON, nullable=False, server_default='{}')  # Region-specific metadata like dialect, customs etc
     total_pois = Column(Integer, default=0)
     total_challenges = Column(Integer, default=0)
     recommended_level = Column(Float, nullable=False)

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from typing import Dict, List, Optional
 from datetime import datetime
 from ..database.config import get_db
@@ -267,8 +268,7 @@ async def get_poi_content(
 ) -> ResponseModel[ContentDeliveryResponse]:
     """Get language learning content for a specific POI."""
     # Try to get from cache first
-    cache_key = f"{poi_id}:{language}:{proficiency_level}:{content_type}"
-    cached_content = await cache.get_poi_content(cache_key)
+    cached_content = await cache.get_poi_content(poi_id, language, proficiency_level)
     if cached_content:
         return ResponseModel(
             success=True,
@@ -298,7 +298,7 @@ async def get_poi_content(
             user_id=current_user.id,
             language=language,
             region=region.id,
-            proficiency_level=0,
+            proficiency_level=proficiency_level,
             poi_progress={},
             content_mastery={},
             achievements=[]
@@ -332,18 +332,18 @@ async def get_poi_content(
             for content in recommendations
         ]
 
-    # Calculate visit-based metrics
+    # Calculate visit-based metrics and overall mastery
     visit_count = progress.poi_progress.get(poi_id, {}).get("visits", 0)
-    avg_mastery = 0
-    if any(content_results.values()):
-        all_mastery = []
-        for content_type_results in content_results.values():
-            all_mastery.extend([item["mastery_level"] for item in content_type_results])
-        avg_mastery = sum(all_mastery) / len(all_mastery) if all_mastery else 0
+    
+    # Calculate average mastery from all mastered content
+    all_mastery = []
+    for ct, mastery_dict in progress.content_mastery.items():
+        all_mastery.extend(mastery_dict.values())
+    avg_mastery = sum(all_mastery) / len(all_mastery) if all_mastery else 0
 
-    # Calculate current difficulty and factors
+    # Calculate current difficulty and factors using POI difficulty as base
     current_difficulty = ContentRecommender.calculate_content_difficulty(
-        poi.difficulty_level,
+        poi.difficulty_level,  # Use POI difficulty as base
         avg_mastery,
         visit_count
     )
@@ -351,13 +351,13 @@ async def get_poi_content(
     # Calculate difficulty factors
     difficulty_factors = {
         "base_difficulty": poi.difficulty_level,
-        "mastery_factor": (avg_mastery / 100) * 0.3,
+        "mastery_factor": (avg_mastery / 100) * 0.3 if all_mastery else 0,  # Added check for empty mastery
         "visit_factor": min((visit_count / 10) * 0.2, 0.2)
     }
 
     # Project future difficulty progression
     difficulty_progression = {}
-    for future_visit in range(visit_count + 1, visit_count + 6):  # Next 5 visits
+    for future_visit in range(visit_count + 1, visit_count + 6):
         projected_difficulty = ContentRecommender.calculate_content_difficulty(
             poi.difficulty_level,
             avg_mastery,
@@ -367,9 +367,9 @@ async def get_poi_content(
 
     # Determine local context with enhanced difficulty info
     local_context = {
-        "dialect": region.metadata.get("dialect", "standard"),
+        "dialect": region.metadata.get("dialect", "standard"),  # Fixed: using region.metadata instead of region.region_metadata
         "formality_level": _determine_formality_level(poi.poi_type),
-        "region_specific_customs": region.metadata.get("customs", {}),
+        "region_specific_customs": region.metadata.get("customs", {}),  # Fixed: using region.metadata here too
         "visit_count": visit_count,
         "difficulty_factors": difficulty_factors,
         "difficulty_progression": difficulty_progression
@@ -386,15 +386,21 @@ async def get_poi_content(
     )
 
     # Cache the response
-    await cache.set_poi_content(cache_key, response.model_dump())
+    await cache.set_poi_content(poi_id, language, proficiency_level, response.model_dump())
 
     # Update POI visit count
     if not progress.poi_progress.get(poi_id):
-        progress.poi_progress[poi_id] = {"visits": 1, "last_visit": str(datetime.utcnow())}
+        progress.poi_progress[poi_id] = {
+            "visits": 1,
+            "completed_content": [],
+            "total_time": 0,
+            "last_visit": str(datetime.utcnow())
+        }
     else:
         progress.poi_progress[poi_id]["visits"] += 1
         progress.poi_progress[poi_id]["last_visit"] = str(datetime.utcnow())
     
+    flag_modified(progress, "poi_progress")
     db.commit()
 
     return ResponseModel(

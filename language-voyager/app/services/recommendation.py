@@ -6,19 +6,19 @@ from ..models.poi import PointOfInterest
 
 class ContentRecommender:
     @staticmethod
-    def calculate_content_difficulty(base_difficulty: float, 
-                                  mastery_level: float,
-                                  visit_count: int) -> float:
-        """Calculate adjusted difficulty based on user's mastery and visit count"""
-        # Adjust difficulty based on mastery (higher mastery = higher difficulty)
+    def calculate_content_difficulty(base_difficulty: float, mastery_level: float, visit_count: int) -> float:
+        """Calculate adjusted difficulty based on user mastery and visit count"""
+        # Mastery reduces difficulty (max 30% reduction)
         mastery_factor = (mastery_level / 100) * 0.3
         
-        # Visits factor (more visits = gradually increasing difficulty)
-        visit_factor = min((visit_count / 10) * 0.2, 0.2)  # Cap at 20% increase
+        # Visits increase difficulty (max 20% increase)
+        visit_factor = min((visit_count / 10) * 0.2, 0.2)
         
-        # Calculate final difficulty
-        adjusted_difficulty = base_difficulty * (1 + mastery_factor + visit_factor)
-        return min(adjusted_difficulty, 100)  # Cap at 100
+        # Combine factors - mastery reduces, visits increase
+        adjusted_difficulty = base_difficulty * (1 - mastery_factor + visit_factor)
+        
+        # Keep within 0-100 range
+        return max(0, min(100, adjusted_difficulty))
 
     @staticmethod
     def get_recommended_content(db: Session,
@@ -29,20 +29,23 @@ class ContentRecommender:
         """Get recommended content for a user based on their progress and POI context"""
         # Get user's mastery level for this POI
         poi_visits = user_progress.poi_progress.get(poi.id, {}).get("visits", 0)
-        content_mastery = user_progress.content_mastery.get(content_type, {})
-        avg_mastery = sum(content_mastery.values()) / len(content_mastery) if content_mastery else 0
+        
+        # Calculate overall mastery level across all content types
+        all_mastery = []
+        for ct_mastery in user_progress.content_mastery.values():
+            all_mastery.extend(ct_mastery.values())
+        avg_mastery = sum(all_mastery) / len(all_mastery) if all_mastery else 0
 
-        # Calculate adjusted difficulty target
+        # Calculate adjusted difficulty target using POI difficulty as base
         target_difficulty = ContentRecommender.calculate_content_difficulty(
-            user_progress.proficiency_level,
+            poi.difficulty_level,
             avg_mastery,
             poi_visits
         )
 
-        # Base query
+        # Base query - removed strict context tag matching
         query = db.query(LanguageContent).filter(
-            LanguageContent.region == poi.region_id,
-            LanguageContent.context_tags.contains([poi.poi_type])
+            LanguageContent.region == poi.region_id
         )
 
         # Filter by content type if specified
@@ -56,19 +59,33 @@ class ContentRecommender:
             LanguageContent.difficulty_level.between(min_difficulty, max_difficulty)
         )
 
-        # Order by how close the difficulty is to target
-        # and exclude already mastered content
+        # Get all matching content
         content_items = query.all()
         recommendations = []
         
         for content in content_items:
-            if content.id not in content_mastery:
+            # Check if content is already mastered
+            type_mastery = user_progress.content_mastery.get(content.content_type, {})
+            if content.id not in type_mastery:
+                # Calculate match score based on difficulty and context relevance
                 difficulty_match = abs(content.difficulty_level - target_difficulty)
+                context_match = 1.0 if poi.poi_type in content.context_tags else 0.5
+                match_score = (100 - difficulty_match) * context_match
+                
                 recommendations.append({
                     "content": content,
-                    "match_score": 100 - difficulty_match
+                    "match_score": match_score
                 })
 
         # Sort by match score and return top N
         recommendations.sort(key=lambda x: x["match_score"], reverse=True)
-        return [r["content"].to_dict() for r in recommendations[:limit]]
+        
+        # Convert content items to dictionaries
+        result = []
+        for r in recommendations[:limit]:
+            content_dict = r["content"].to_dict()
+            content_dict["completed"] = False  # Not mastered since we filtered those out
+            content_dict["mastery_level"] = 0  # No mastery yet
+            result.append(content_dict)
+            
+        return result
