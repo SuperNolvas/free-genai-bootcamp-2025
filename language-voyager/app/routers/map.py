@@ -5,6 +5,10 @@ from ..database.config import get_db
 from ..services.arcgis import ArcGISService
 from ..auth.utils import get_current_active_user
 from ..models.user import User
+from ..models.region import Region
+from ..models.progress import UserProgress
+from .schemas.map import Region as RegionSchema
+from ..core.schemas import ResponseModel
 
 router = APIRouter(
     prefix="/map",
@@ -18,12 +22,67 @@ async def get_arcgis_service(db: Session = Depends(get_db)) -> ArcGISService:
     except ValueError as e:
         raise HTTPException(status_code=503, detail=str(e))
 
-@router.get("/regions")
+@router.get("/regions", response_model=ResponseModel[List[RegionSchema]])
 async def list_available_regions(
-    service: ArcGISService = Depends(get_arcgis_service)
-) -> Dict:
-    """List available regions with their basic info, using cached data where possible"""
-    return await service.get_map_features("all", "region")
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> ResponseModel[List[RegionSchema]]:
+    """List available regions with their metadata, progress requirements, and availability status"""
+    # Get all regions from database
+    regions = db.query(Region).all()
+    
+    # Get user's progress for all regions
+    progress_records = {
+        p.region: p for p in db.query(UserProgress).filter(
+            UserProgress.user_id == current_user.id
+        ).all()
+    }
+    
+    # Convert to response schema with availability checks
+    region_responses = []
+    for region in regions:
+        # Check if user meets requirements
+        is_available = True
+        requirements = {}
+        
+        if region.requirements:
+            is_available = False
+            for req_region, req_level in region.requirements.items():
+                if req_region in progress_records:
+                    prog = progress_records[req_region]
+                    if prog.proficiency_level >= req_level:
+                        is_available = True
+                        break  # If any requirement is met, region is available
+                    else:
+                        requirements[req_region] = req_level
+                else:
+                    requirements[req_region] = req_level
+        
+        # Convert to response model
+        region_response = RegionSchema(
+            id=region.id,
+            name=region.name,
+            local_name=region.local_name,
+            description=region.description,
+            languages=region.languages,
+            bounds=region.bounds,
+            center=region.center,
+            difficulty_level=region.difficulty_level,
+            is_available=is_available,
+            requirements=requirements if not is_available else None,
+            total_pois=region.total_pois,
+            total_challenges=region.total_challenges,
+            recommended_level=region.recommended_level,
+            created_at=region.created_at,
+            updated_at=region.updated_at
+        )
+        region_responses.append(region_response)
+    
+    return ResponseModel(
+        success=True,
+        message="Regions retrieved successfully",
+        data=region_responses
+    )
 
 @router.get("/region/{region_id}/pois")
 async def get_region_pois(
