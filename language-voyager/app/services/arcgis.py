@@ -129,14 +129,17 @@ class ArcGISService:
         within_limit, usage_percentage, alert_level = await self._check_usage_limits(operation_type)
 
         # Make request
+        base_url = "https://geocode-api.arcgis.com/arcgis/rest/services/World/GeocodeServer" if operation_type == "geocoding" else "https://www.arcgis.com/sharing/rest"
+        
         params['token'] = self.api_key
         session = aiohttp.ClientSession()
         try:
-            response = await session.get(f"https://www.arcgis.com/sharing/rest/{endpoint}", params=params)
+            url = f"{base_url}/{endpoint}"
+            response = await session.get(url, params=params)
             if response.status != 200:
                 raise HTTPException(
                     status_code=response.status,
-                    detail="ArcGIS API request failed"
+                    detail=f"ArcGIS API request failed: {url}"
                 )
             result = await response.json()
         finally:
@@ -163,9 +166,10 @@ class ArcGISService:
         params = {
             'f': 'json',
             'address': address,
-            'outFields': '*'
+            'outFields': '*',
+            'singleLine': address
         }
-        return await self._make_request('geocode', params, 'geocoding')
+        return await self._make_request('findAddressCandidates', params, 'geocoding')
 
     async def get_route(self, start_point: Dict[str, float], end_point: Dict[str, float]) -> Dict:
         """Get route between two points with credit-aware caching"""
