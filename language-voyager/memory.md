@@ -1305,3 +1305,116 @@ Discovered test interdependence in POI content system tests:
    - Implement proper test cleanup
 
 *Note: While test interdependence exists, the actual feature implementation is correct and working as expected. Test suite organization improvements can be addressed in future updates.*
+
+## OpenRouter LLM Integration (March 14, 2025)
+### Implementation Status
+1. **Core Components** ✅
+   - OpenRouter service wrapper in `/app/services/openrouter.py`
+   - Conversation router in `/app/routers/conversation.py`
+   - Conversation schemas in `/app/routers/schemas/conversation.py`
+   - Environment configuration for OpenRouter API
+
+2. **Features Implemented**
+   - Context-aware conversation generation
+   - Location-specific prompting
+   - Cultural context integration
+   - Formality level adaptation
+   - Difficulty scaling
+   - Multi-language support
+   - Error correction detection
+   - Cultural note extraction
+
+3. **Testing Results**
+   - Integration tests passing successfully
+   - Proper API authentication
+   - Context-aware prompt building verified
+   - Response parsing working correctly
+   - Error handling functioning
+
+### API Examples
+1. **Sample Request**
+```json
+POST /api/v1/conversation/chat
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tell me how to ask where Sensoji Temple is in polite Japanese"
+    }
+  ],
+  "context": {
+    "poi_type": "temple",
+    "formality_level": "polite",
+    "dialect": "standard",
+    "difficulty_level": 50,
+    "region_specific_customs": {
+      "temple_etiquette": "Remove shoes before entering, be quiet and respectful"
+    }
+  }
+}
+```
+
+2. **Sample Response**
+```json
+{
+  "success": true,
+  "message": "Conversation response generated successfully",
+  "data": {
+    "message": {
+      "role": "assistant",
+      "content": "Here's how to politely ask for directions to Sensoji Temple in Japanese:\n\nせんそうじを おたずね申し上げますが、せんそうじは どちらの ほうに ございますでしょうか。\n\nRomaji: Sensoji o otazune mōshiagemasu ga, Sensoji wa dochira no hō ni gozaimasu deshō ka.\n\nThis is a very polite way to ask, using:\n- Honorific prefix \"o\"\n- Humble verb \"mōshiageru\"\n- Polite existence verb \"gozaimasu\"\n- Polite question marker \"deshō ka\""
+    },
+    "context": {
+      "poi_type": "temple",
+      "formality_level": "polite",
+      "dialect": "standard",
+      "difficulty_level": 50,
+      "region_specific_customs": {
+        "temple_etiquette": "Remove shoes before entering, be quiet and respectful"
+      }
+    }
+  }
+}
+```
+
+### Configuration Details
+1. **Environment Setup**
+   - OPENROUTER_API_KEY configured in .env
+   - OPENROUTER_DEFAULT_MODEL set to "google/gemma-3-27b-it:free"
+   - HTTP referer set to language-voyager.example.com
+   - Max tokens limit: 1000
+
+2. **System Prompt Template**
+```
+You are a native {dialect} speaker helping someone learn the language.
+Current location: {poi_type}
+Speaking style: {formality}
+Difficulty level: {difficulty}/100
+
+Guidelines:
+- Use appropriate formality for the location type
+- Stay in character as a native speaker
+- Maintain conversation difficulty around {difficulty}/100
+- Use {dialect} dialect features when appropriate
+- Natural conversations about this location type
+- Correct major language errors gently
+- Provide cultural context when relevant
+
+Local customs to consider:
+- [Location-specific customs listed here]
+```
+
+### Next Steps
+1. **Short Term**
+   - Enhance correction detection
+   - Improve cultural note extraction
+   - Add conversation history persistence
+   - Implement more sophisticated prompt templates
+
+2. **Medium Term**
+   - Add conversation analytics
+   - Implement dynamic difficulty adjustment
+   - Enhance context awareness
+   - Add multi-turn conversation memory
+
+*Note: OpenRouter LLM integration completed successfully with google/gemma-3-27b-it:free model. System is ready for conversation-based language learning features.*
