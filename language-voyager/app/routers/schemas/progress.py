@@ -20,7 +20,6 @@ class Achievement(BaseModel):
     metadata: Dict = Field(default_factory=dict, description="Additional achievement metadata")
 
 class POIProgressUpdate(BaseModel):
-    poi_id: str = Field(..., description="POI identifier")
     content_type: str = Field(..., description="Type of content interacted with")
     score: float = Field(..., ge=0, le=100, description="Score for this interaction")
     time_spent: int = Field(..., ge=0, description="Time spent in seconds")

@@ -4,6 +4,7 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm.attributes import flag_modified
 from datetime import datetime
 from typing import List
+import logging
 
 from ..database.config import get_db
 from ..models.user import User
@@ -22,6 +23,8 @@ from ..services.cache import RedisCache
 
 # Initialize cache with RedisCache class instead of importing instance
 cache = RedisCache()
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/progress",
@@ -231,19 +234,25 @@ async def complete_poi_content(
         UserProgress.user_id == current_user.id,
         UserProgress.region == poi.region_id
     ).first()
-
     if not progress:
         raise HTTPException(status_code=400, detail="No progress record found for this region")
 
-    # Update content mastery
-    if update.content_type not in progress.content_mastery:
-        progress.content_mastery[update.content_type] = {}
-    
-    for item_id in update.completed_items:
-        progress.content_mastery[update.content_type][item_id] = update.score
+    logger.info(f"Initial progress state - poi_progress: {progress.poi_progress}, achievements: {progress.achievements}")
+
+    # Initialize or get progress fields
+    if progress.achievements is None:
+        progress.achievements = []
+        flag_modified(progress, "achievements")
+    if progress.content_mastery is None:
+        progress.content_mastery = {}
+        flag_modified(progress, "content_mastery")
+    if progress.poi_progress is None:
+        progress.poi_progress = {}
+        flag_modified(progress, "poi_progress")
 
     # Update POI progress
     if poi_id not in progress.poi_progress:
+        logger.info(f"Creating new POI progress entry for {poi_id}")
         progress.poi_progress[poi_id] = {
             "visits": 1,
             "completed_content": [],
@@ -251,34 +260,68 @@ async def complete_poi_content(
             "last_visit": str(datetime.utcnow())
         }
     else:
+        logger.info(f"Updating existing POI progress for {poi_id}")
         poi_progress = progress.poi_progress[poi_id]
+        if "visits" not in poi_progress:
+            poi_progress["visits"] = 0
+        current_visits = poi_progress["visits"]
+        logger.info(f"Current visits before increment: {current_visits}")
+        
+        if "completed_content" not in poi_progress:
+            poi_progress["completed_content"] = []
+        if "total_time" not in poi_progress:
+            poi_progress["total_time"] = 0
+
+        # Update visit count and other fields
+        poi_progress["visits"] += 1
+        logger.info(f"Visits after increment: {poi_progress['visits']}")
         poi_progress["completed_content"].extend(update.completed_items)
-        poi_progress["total_time"] = poi_progress.get("total_time", 0) + update.time_spent
+        poi_progress["total_time"] += update.time_spent
         poi_progress["last_visit"] = str(datetime.utcnow())
+
+    # Ensure changes are tracked
+    flag_modified(progress, "poi_progress")
+    
+    # Update content mastery
+    if update.content_type not in progress.content_mastery:
+        progress.content_mastery[update.content_type] = {}
+    
+    for item_id in update.completed_items:
+        progress.content_mastery[update.content_type][item_id] = update.score
+    flag_modified(progress, "content_mastery")
 
     # Check for achievements
     new_achievements = []
-    
+    current_visits = progress.poi_progress[poi_id]["visits"]
+    logger.info(f"Checking achievements for {current_visits} visits")
+    logger.info(f"Current achievements: {progress.achievements}")
+
     # Visit count achievements
-    visit_count = progress.poi_progress[poi_id].get("visits", 0)
-    if visit_count >= 5 and not any(a["id"] == f"poi_visits_{poi_id}_5" for a in progress.achievements):
+    achievement_id = f"poi_visits_{poi_id}_5"
+    has_achievement = any(a.get("id") == achievement_id for a in progress.achievements)
+    logger.info(f"Has achievement {achievement_id}? {has_achievement}")
+
+    if current_visits == 5 and not has_achievement:
+        logger.info("Adding Frequent Visitor achievement")
         new_achievements.append({
-            "id": f"poi_visits_{poi_id}_5",
+            "id": achievement_id,
             "name": "Frequent Visitor",
             "description": f"Visited {poi.name} 5 times",
             "type": "poi_visit",
             "progress": 100,
             "completed": True,
-            "completed_at": datetime.utcnow(),
-            "metadata": {"poi_id": poi_id, "visit_count": visit_count}
+            "completed_at": str(datetime.utcnow()),
+            "metadata": {"poi_id": poi_id, "visit_count": current_visits}
         })
 
     # Content mastery achievements
-    completed_count = len(progress.poi_progress[poi_id].get("completed_content", []))
-    total_content = len(poi.content_ids)
+    completed_content = set(progress.poi_progress[poi_id]["completed_content"])
+    completed_count = len(completed_content)
+    total_content = len(poi.content_ids) if poi.content_ids else 0
+
     if total_content > 0:
         mastery_percent = (completed_count / total_content) * 100
-        if mastery_percent >= 50 and not any(a["id"] == f"poi_mastery_{poi_id}_50" for a in progress.achievements):
+        if mastery_percent >= 50 and not any(a.get("id") == f"poi_mastery_{poi_id}_50" for a in progress.achievements):
             new_achievements.append({
                 "id": f"poi_mastery_{poi_id}_50",
                 "name": "POI Explorer",
@@ -286,10 +329,10 @@ async def complete_poi_content(
                 "type": "content_mastery",
                 "progress": mastery_percent,
                 "completed": True,
-                "completed_at": datetime.utcnow(),
+                "completed_at": str(datetime.utcnow()),
                 "metadata": {"poi_id": poi_id, "mastery_percent": mastery_percent}
             })
-        if mastery_percent >= 100 and not any(a["id"] == f"poi_mastery_{poi_id}_100" for a in progress.achievements):
+        if mastery_percent >= 100 and not any(a.get("id") == f"poi_mastery_{poi_id}_100" for a in progress.achievements):
             new_achievements.append({
                 "id": f"poi_mastery_{poi_id}_100",
                 "name": "POI Master",
@@ -297,13 +340,20 @@ async def complete_poi_content(
                 "type": "content_mastery",
                 "progress": 100,
                 "completed": True,
-                "completed_at": datetime.utcnow(),
+                "completed_at": str(datetime.utcnow()),
                 "metadata": {"poi_id": poi_id, "mastery_percent": mastery_percent}
             })
 
     # Add new achievements
-    progress.achievements.extend(new_achievements)
-    
+    if new_achievements:
+        logger.info(f"Adding new achievements: {new_achievements}")
+        if not isinstance(progress.achievements, list):
+            progress.achievements = []
+        progress.achievements.extend(new_achievements)
+        flag_modified(progress, "achievements")
+    else:
+        logger.info("No new achievements to add")
+
     # Update progress and recalculate proficiency
     content_scores = []
     for content_type, items in progress.content_mastery.items():
@@ -313,6 +363,10 @@ async def complete_poi_content(
         progress.proficiency_level = sum(content_scores) / len(content_scores)
 
     db.commit()
+    db.refresh(progress)
+
+    logger.info(f"Final progress state - poi_progress: {progress.poi_progress}, achievements: {progress.achievements}")
+    logger.info(f"Returning achievements: {new_achievements}")
 
     # Invalidate cached content for this POI
     await cache.invalidate_poi_content(poi_id)

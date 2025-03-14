@@ -1,6 +1,7 @@
 import pytest
 from datetime import datetime
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from app.models.poi import PointOfInterest
 from app.models.region import Region
 from app.models.content import LanguageContent, ContentType
@@ -231,37 +232,49 @@ async def test_achievement_unlocking(async_client, test_user, test_poi, test_con
     # Make sure POI is attached to session
     test_poi = test_db.merge(test_poi)
     
-    # Create progress with existing visits
-    progress = UserProgress(
-        user_id=test_user.id,
-        language="ja",
-        region=test_poi.region_id,
-        proficiency_level=0,
-        poi_progress={
-            test_poi.id: {
-                "visits": 4,
-                "completed_content": [],
-                "total_time": 1200,
-                "last_visit": str(datetime.utcnow())
-            }
-        },
-        content_mastery={},
-        achievements=[]
-    )
-    
-    existing_progress = test_db.query(UserProgress).filter(
+    # Get or create progress record
+    progress = test_db.query(UserProgress).filter(
         UserProgress.user_id == test_user.id,
         UserProgress.region == test_poi.region_id
     ).first()
     
-    if not existing_progress:
+    if not progress:
+        progress = UserProgress(
+            user_id=test_user.id,
+            language="ja",
+            region=test_poi.region_id,
+            proficiency_level=0,
+            poi_progress={},
+            content_mastery={},
+            achievements=[]
+        )
         test_db.add(progress)
         test_db.commit()
         test_db.refresh(progress)
-    else:
-        progress = existing_progress
     
-    # Complete content to trigger achievement - Update endpoint URL to match router
+    # Clear existing progress and set initial visit count to 4
+    progress.poi_progress = {}
+    progress.poi_progress[test_poi.id] = {
+        "visits": 4,
+        "completed_content": [],
+        "total_time": 1200,
+        "last_visit": str(datetime.utcnow())
+    }
+    flag_modified(progress, "poi_progress")  # Mark JSON field as modified
+    test_db.commit()
+    
+    # Refresh to ensure we have the latest state
+    test_db.refresh(progress)
+    test_db.expire_all()  # Clear SQLAlchemy's identity map
+    
+    # Verify initial state
+    progress = test_db.query(UserProgress).filter(
+        UserProgress.user_id == test_user.id,
+        UserProgress.region == test_poi.region_id
+    ).first()
+    assert progress.poi_progress[test_poi.id]["visits"] == 4
+    
+    # Complete content to trigger achievement
     response = await async_client.post(
         f"/api/v1/progress/poi/{test_poi.id}/complete",
         json={
@@ -282,6 +295,7 @@ async def test_achievement_unlocking(async_client, test_user, test_poi, test_con
     
     # Verify progress update
     progress = test_db.merge(progress)  # Re-attach to session
+    test_db.refresh(progress)  # Ensure we have latest data
     
     assert len(progress.achievements) > 0
     assert progress.poi_progress[test_poi.id]["visits"] == 5
