@@ -11,9 +11,9 @@ class ContentType(str, enum.Enum):
 
 class LanguageContent(Base):
     __tablename__ = "language_content"
-
-    id = Column(Integer, primary_key=True, index=True)
-    content_type = Column(Enum(ContentType))
+    
+    id = Column(String, primary_key=True, index=True)  # Changed from Integer to String
+    content_type = Column(String)  # Changed to String to match enum values directly
     language = Column(String)  # e.g., "japanese", "korean"
     region = Column(String)    # Geographic region relevance
     content = Column(JSON)     # Actual content with translations

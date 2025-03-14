@@ -18,7 +18,10 @@ from .schemas.progress import (
     OverallProgress,
     POIProgressUpdate
 )
-from ..services.cache import cache
+from ..services.cache import RedisCache
+
+# Initialize cache with RedisCache class instead of importing instance
+cache = RedisCache()
 
 router = APIRouter(
     prefix="/progress",
