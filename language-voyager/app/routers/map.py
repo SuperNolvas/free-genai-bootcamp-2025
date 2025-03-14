@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Dict, List
+from typing import Dict, List, Optional
 from ..database.config import get_db
 from ..services.arcgis import ArcGISService
 from ..auth.utils import get_current_active_user
@@ -8,8 +8,10 @@ from ..models.user import User
 from ..models.region import Region
 from ..models.poi import PointOfInterest
 from ..models.progress import UserProgress
-from .schemas.map import Region as RegionSchema, POIResponse, POICreate, POIUpdate
+from ..models.content import LanguageContent, ContentType
+from .schemas.map import Region as RegionSchema, POIResponse, POICreate, POIUpdate, ContentDeliveryResponse
 from ..core.schemas import ResponseModel
+from ..services.cache import cache
 
 router = APIRouter(
     prefix="/map",
@@ -251,3 +253,132 @@ async def update_poi(
         message="POI updated successfully",
         data=db_poi
     )
+
+@router.get("/pois/{poi_id}/content", response_model=ResponseModel[ContentDeliveryResponse])
+async def get_poi_content(
+    poi_id: str,
+    language: str = Query(..., description="Language code (e.g., 'ja' for Japanese)"),
+    proficiency_level: float = Query(..., ge=0, le=100, description="User's proficiency level"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> ResponseModel[ContentDeliveryResponse]:
+    """Get language learning content for a specific POI."""
+    # Try to get from cache first
+    cached_content = await cache.get_poi_content(poi_id, language, proficiency_level)
+    if cached_content:
+        return ResponseModel(
+            success=True,
+            message=f"Retrieved cached content for POI: {poi_id}",
+            data=ContentDeliveryResponse(**cached_content)
+        )
+
+    # Verify POI exists
+    poi = db.query(PointOfInterest).filter(PointOfInterest.id == poi_id).first()
+    if not poi:
+        raise HTTPException(status_code=404, detail="POI not found")
+
+    # Get region for dialect/context information
+    region = db.query(Region).filter(Region.id == poi.region_id).first()
+    if not region:
+        raise HTTPException(status_code=404, detail="Region not found")
+
+    # Get user's progress for this POI
+    progress = db.query(UserProgress).filter(
+        UserProgress.user_id == current_user.id,
+        UserProgress.language == language,
+        UserProgress.region == region.id
+    ).first()
+
+    # Initialize progress if not exists
+    if not progress:
+        progress = UserProgress(
+            user_id=current_user.id,
+            language=language,
+            region=region.id,
+            proficiency_level=0,
+            poi_progress={},
+            content_mastery={},
+            achievements=[]
+        )
+        db.add(progress)
+        db.commit()
+
+    # Query content based on POI context and user's level
+    base_query = db.query(LanguageContent).filter(
+        LanguageContent.language == language,
+        LanguageContent.region == region.id,
+        LanguageContent.difficulty_level <= proficiency_level + 10
+    )
+
+    # Get all content types with proper progress tracking
+    content_types = {
+        ContentType.VOCABULARY: "vocabulary",
+        ContentType.PHRASE: "phrases",
+        ContentType.DIALOGUE: "dialogues",
+        ContentType.CULTURAL_NOTE: "cultural_notes"
+    }
+    
+    content_results = {}
+    for content_type, result_key in content_types.items():
+        items = base_query.filter(
+            LanguageContent.content_type == content_type,
+            LanguageContent.context_tags.contains([poi.poi_type])
+        ).all()
+        
+        # Track what content has been completed
+        completed_items = progress.content_mastery.get(result_key, {})
+        content_results[result_key] = [
+            {
+                **content.content,
+                "completed": content.id in completed_items,
+                "mastery_level": completed_items.get(content.id, 0)
+            }
+            for content in items
+        ]
+
+    # Determine local context with dialect and customs
+    local_context = {
+        "dialect": region.metadata.get("dialect", "standard"),
+        "formality_level": _determine_formality_level(poi.poi_type),
+        "region_specific_customs": region.metadata.get("customs", {}),
+        "visit_count": progress.poi_progress.get(poi_id, {}).get("visits", 0)
+    }
+
+    # Create response
+    response = ContentDeliveryResponse(
+        vocabulary=content_results["vocabulary"],
+        phrases=content_results["phrases"],
+        dialogues=content_results["dialogues"],
+        cultural_notes=content_results["cultural_notes"],
+        difficulty_level=poi.difficulty_level,
+        local_context=local_context
+    )
+
+    # Cache the response
+    await cache.set_poi_content(poi_id, language, proficiency_level, response.model_dump())
+
+    # Update POI visit count
+    if not progress.poi_progress.get(poi_id):
+        progress.poi_progress[poi_id] = {"visits": 1, "last_visit": str(datetime.utcnow())}
+    else:
+        progress.poi_progress[poi_id]["visits"] += 1
+        progress.poi_progress[poi_id]["last_visit"] = str(datetime.utcnow())
+    
+    db.commit()
+
+    return ResponseModel(
+        success=True,
+        message=f"Retrieved learning content for POI: {poi.name}",
+        data=response
+    )
+
+def _determine_formality_level(poi_type: str) -> str:
+    """Determine appropriate formality level based on POI type."""
+    formal_types = {"temple", "shrine", "government_office", "museum"}
+    casual_types = {"park", "shopping_street", "market"}
+    
+    if poi_type in formal_types:
+        return "formal"
+    elif poi_type in casual_types:
+        return "casual"
+    return "neutral"

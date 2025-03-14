@@ -10,10 +10,21 @@ class ProgressUpdate(BaseModel):
     metadata: Optional[Dict] = Field(default=None, description="Additional activity-specific data")
 
 class Achievement(BaseModel):
-    title: str
-    description: str
-    criteria: Dict
-    achieved_at: datetime
+    id: str = Field(..., description="Unique achievement identifier")
+    name: str = Field(..., description="Achievement name")
+    description: str = Field(..., description="Achievement description")
+    type: str = Field(..., description="Achievement type (e.g., poi_visit, content_mastery)")
+    progress: float = Field(..., ge=0, le=100, description="Progress towards achievement (0-100)")
+    completed: bool = Field(False, description="Whether the achievement is completed")
+    completed_at: Optional[datetime] = Field(None, description="When the achievement was completed")
+    metadata: Dict = Field(default_factory=dict, description="Additional achievement metadata")
+
+class POIProgressUpdate(BaseModel):
+    poi_id: str = Field(..., description="POI identifier")
+    content_type: str = Field(..., description="Type of content interacted with")
+    score: float = Field(..., ge=0, le=100, description="Score for this interaction")
+    time_spent: int = Field(..., ge=0, description="Time spent in seconds")
+    completed_items: List[str] = Field(default_factory=list, description="IDs of completed content items")
 
 class ProgressResponse(BaseModel):
     language: str

@@ -17,5 +17,10 @@ class UserProgress(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    # Add POI tracking
+    poi_progress = Column(JSON, default=dict, nullable=False)  # Store POI visit history and completion status
+    content_mastery = Column(JSON, default=dict, nullable=False)  # Track content mastery by type
+    achievements = Column(JSON, default=list, nullable=False)  # Store earned achievements
+    
     # Relationship to user
     user = relationship("User", back_populates="progress")

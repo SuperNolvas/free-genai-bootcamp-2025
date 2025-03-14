@@ -1,11 +1,13 @@
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 from app.database.config import Base, get_db
 from app.main import app
 from app.core.config import get_settings
+from app.models.user import User
+from app.auth.utils import get_password_hash
 
 # Test database URL
 SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -63,6 +65,20 @@ def test_db():
     
     # Drop tables after tests
     Base.metadata.drop_all(bind=engine)
+
+@pytest.fixture
+def test_user(test_db: Session):
+    """Create a test user for authentication"""
+    user = User(
+        email="test@example.com",
+        hashed_password=get_password_hash("testpass123"),
+        is_active=True,
+        username="testuser"
+    )
+    test_db.add(user)
+    test_db.commit()
+    test_db.refresh(user)
+    return user
 
 @pytest.fixture
 def client(test_db):

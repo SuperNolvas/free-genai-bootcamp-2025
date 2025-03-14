@@ -8,14 +8,17 @@ from typing import List
 from ..database.config import get_db
 from ..models.user import User
 from ..models.progress import UserProgress
+from ..models.poi import PointOfInterest
 from ..auth.utils import get_current_active_user
 from ..core.schemas import ResponseModel
 from .schemas.progress import (
     ProgressUpdate,
     ProgressResponse,
     Achievement,
-    OverallProgress
+    OverallProgress,
+    POIProgressUpdate
 )
+from ..services.cache import cache
 
 router = APIRouter(
     prefix="/progress",
@@ -205,4 +208,114 @@ async def get_region_progress(
         success=True,
         message=f"Progress retrieved for region: {region}",
         data=response_data
+    )
+
+@router.post("/poi/{poi_id}/complete", response_model=ResponseModel[List[Achievement]])
+async def complete_poi_content(
+    poi_id: str,
+    update: POIProgressUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> ResponseModel[List[Achievement]]:
+    """Record completion of POI content and check for achievements"""
+    # Verify POI exists
+    poi = db.query(PointOfInterest).filter(PointOfInterest.id == poi_id).first()
+    if not poi:
+        raise HTTPException(status_code=404, detail="POI not found")
+
+    # Get or create progress record
+    progress = db.query(UserProgress).filter(
+        UserProgress.user_id == current_user.id,
+        UserProgress.region == poi.region_id
+    ).first()
+
+    if not progress:
+        raise HTTPException(status_code=400, detail="No progress record found for this region")
+
+    # Update content mastery
+    if update.content_type not in progress.content_mastery:
+        progress.content_mastery[update.content_type] = {}
+    
+    for item_id in update.completed_items:
+        progress.content_mastery[update.content_type][item_id] = update.score
+
+    # Update POI progress
+    if poi_id not in progress.poi_progress:
+        progress.poi_progress[poi_id] = {
+            "visits": 1,
+            "completed_content": [],
+            "total_time": update.time_spent,
+            "last_visit": str(datetime.utcnow())
+        }
+    else:
+        poi_progress = progress.poi_progress[poi_id]
+        poi_progress["completed_content"].extend(update.completed_items)
+        poi_progress["total_time"] = poi_progress.get("total_time", 0) + update.time_spent
+        poi_progress["last_visit"] = str(datetime.utcnow())
+
+    # Check for achievements
+    new_achievements = []
+    
+    # Visit count achievements
+    visit_count = progress.poi_progress[poi_id].get("visits", 0)
+    if visit_count >= 5 and not any(a["id"] == f"poi_visits_{poi_id}_5" for a in progress.achievements):
+        new_achievements.append({
+            "id": f"poi_visits_{poi_id}_5",
+            "name": "Frequent Visitor",
+            "description": f"Visited {poi.name} 5 times",
+            "type": "poi_visit",
+            "progress": 100,
+            "completed": True,
+            "completed_at": datetime.utcnow(),
+            "metadata": {"poi_id": poi_id, "visit_count": visit_count}
+        })
+
+    # Content mastery achievements
+    completed_count = len(progress.poi_progress[poi_id].get("completed_content", []))
+    total_content = len(poi.content_ids)
+    if total_content > 0:
+        mastery_percent = (completed_count / total_content) * 100
+        if mastery_percent >= 50 and not any(a["id"] == f"poi_mastery_{poi_id}_50" for a in progress.achievements):
+            new_achievements.append({
+                "id": f"poi_mastery_{poi_id}_50",
+                "name": "POI Explorer",
+                "description": f"Completed 50% of content at {poi.name}",
+                "type": "content_mastery",
+                "progress": mastery_percent,
+                "completed": True,
+                "completed_at": datetime.utcnow(),
+                "metadata": {"poi_id": poi_id, "mastery_percent": mastery_percent}
+            })
+        if mastery_percent >= 100 and not any(a["id"] == f"poi_mastery_{poi_id}_100" for a in progress.achievements):
+            new_achievements.append({
+                "id": f"poi_mastery_{poi_id}_100",
+                "name": "POI Master",
+                "description": f"Completed all content at {poi.name}",
+                "type": "content_mastery",
+                "progress": 100,
+                "completed": True,
+                "completed_at": datetime.utcnow(),
+                "metadata": {"poi_id": poi_id, "mastery_percent": mastery_percent}
+            })
+
+    # Add new achievements
+    progress.achievements.extend(new_achievements)
+    
+    # Update progress and recalculate proficiency
+    content_scores = []
+    for content_type, items in progress.content_mastery.items():
+        content_scores.extend(items.values())
+    
+    if content_scores:
+        progress.proficiency_level = sum(content_scores) / len(content_scores)
+
+    db.commit()
+
+    # Invalidate cached content for this POI
+    await cache.invalidate_poi_content(poi_id)
+
+    return ResponseModel(
+        success=True,
+        message=f"Content completion recorded for POI: {poi.name}",
+        data=[Achievement(**achievement) for achievement in new_achievements]
     )

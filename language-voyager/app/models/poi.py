@@ -14,6 +14,6 @@ class PointOfInterest(Base):
     region_id = Column(String, ForeignKey('regions.id'), nullable=False)
     difficulty_level = Column(Float, nullable=False)
     content_ids = Column(JSON, default=list)  # List of associated content/challenge IDs
-    metadata = Column(JSON, default=dict)     # Additional metadata like opening hours, etc
+    poi_metadata = Column(JSON, default=dict)  # Additional metadata like opening hours, etc
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
