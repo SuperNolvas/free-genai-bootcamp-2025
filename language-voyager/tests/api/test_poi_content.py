@@ -19,7 +19,7 @@ def test_region(test_db: Session):
         center={"lat": 35.65, "lon": 139.75},
         difficulty_level=50,
         recommended_level=45,
-        metadata={"dialect": "tokyo", "customs": {"greeting": "formal"}}
+        region_metadata={"dialect": "tokyo", "customs": {"greeting": "formal"}}
     )
     
     existing = test_db.query(Region).filter(Region.id == region.id).first()
@@ -310,7 +310,7 @@ async def test_content_difficulty_progression(async_client, test_user, test_poi,
     })
     token = response.json()["access_token"]
     
-    # Create progress with some existing mastery
+    # Create progress with visits=3 to test exact visit factor calculation
     progress = UserProgress(
         user_id=test_user.id,
         language="ja",
@@ -318,7 +318,7 @@ async def test_content_difficulty_progression(async_client, test_user, test_poi,
         proficiency_level=50,
         poi_progress={
             test_poi.id: {
-                "visits": 3,
+                "visits": 3,  # Set exactly to 3 for the test
                 "completed_content": ["vocab_1"],
                 "total_time": 900,
                 "last_visit": str(datetime.utcnow())
@@ -331,7 +331,13 @@ async def test_content_difficulty_progression(async_client, test_user, test_poi,
     )
     test_db.add(progress)
     test_db.commit()
-
+    
+    # Clear any existing progress to ensure clean state
+    test_db.query(UserProgress).filter(
+        UserProgress.user_id != test_user.id
+    ).delete()
+    test_db.commit()
+    
     # Get POI content to check difficulty progression
     response = await async_client.get(
         f"/api/v1/map/pois/{test_poi.id}/content",
@@ -340,7 +346,7 @@ async def test_content_difficulty_progression(async_client, test_user, test_poi,
     )
     assert response.status_code == 200
     data = response.json()["data"]
-
+    
     # Verify difficulty factors
     factors = data["local_context"]["difficulty_factors"]
     assert "base_difficulty" in factors
@@ -354,12 +360,12 @@ async def test_content_difficulty_progression(async_client, test_user, test_poi,
     mastery_factor = factors["mastery_factor"]
     assert 0 <= mastery_factor <= 0.3
     assert mastery_factor == pytest.approx((85/100) * 0.3, rel=0.01)
-
+    
     # Verify visit factor (20% max increase)
     visit_factor = factors["visit_factor"]
     assert 0 <= visit_factor <= 0.2
-    assert visit_factor == pytest.approx((3/10) * 0.2, rel=0.01)
-
+    assert visit_factor == pytest.approx((3/10) * 0.2, rel=0.01)  # Should be 0.06 for 3 visits
+    
     # Verify difficulty progression
     progression = data["local_context"]["difficulty_progression"]
     assert len(progression) == 5  # Next 5 visits
