@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 from typing import Dict, List, Optional
@@ -15,9 +15,9 @@ from ..models.progress import UserProgress
 from ..models.content import LanguageContent, ContentType
 from .schemas.map import Region as RegionSchema, POIResponse, POICreate, POIUpdate, POIUpdate, ContentDeliveryResponse
 from ..core.schemas import ResponseModel
-from ..services.cache import cache
+from ..services.cache import cache, RedisCache
 from ..services.recommendation import ContentRecommender
-from ..services.websocket import manager
+from ..services.websocket import manager, LocationUpdate
 from ..services.offline_maps import OfflineMapService
 from ..services.location_manager import location_manager
 import asyncio
@@ -283,10 +283,24 @@ async def get_poi_content(
     language: str = Query(..., description="Language code (e.g., 'ja' for Japanese)"),
     proficiency_level: float = Query(..., ge=0, le=100, description="User's proficiency level"),
     content_type: Optional[str] = Query(None, description="Optional content type filter"),
+    client_version: Optional[int] = Query(None, description="Client's current content version"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> ResponseModel[ContentDeliveryResponse]:
     """Get language learning content for a specific POI."""
+    # Verify POI exists
+    poi = db.query(PointOfInterest).filter(PointOfInterest.id == poi_id).first()
+    if not poi:
+        raise HTTPException(status_code=404, detail="POI not found")
+
+    # Version check
+    version_info = poi.get_version_info()
+    if client_version and not poi.validate_content_version(client_version):
+        raise HTTPException(
+            status_code=409, 
+            detail="Content version mismatch. Please update content."
+        )
+
     # Don't use cache since we need fresh difficulty calculations
     
     # Verify POI exists
@@ -408,14 +422,15 @@ async def get_poi_content(
         "difficulty_progression": difficulty_progression
     }
 
-    # Create response
+    # Create response with version info
     response = ContentDeliveryResponse(
         vocabulary=content_results.get(ContentType.VOCABULARY, []),
         phrases=content_results.get(ContentType.PHRASE, []),
         dialogues=content_results.get(ContentType.DIALOGUE, []),
         cultural_notes=content_results.get(ContentType.CULTURAL_NOTE, []),
         difficulty_level=current_difficulty,
-        local_context=local_context
+        local_context=local_context,
+        version_info=version_info
     )
 
     # Update visit count for next time (after all calculations are done)
@@ -496,16 +511,29 @@ async def websocket_endpoint(
                         **power_update
                     })
                 
-                lat = data.get('lat')
-                lon = data.get('lon')
-                region_id = data.get('region_id')
-                
-                if all(x is not None for x in (lat, lon, region_id)):
+                try:
+                    # Validate location data using LocationUpdate model
+                    location_update = LocationUpdate(
+                        lat=data.get('lat'),
+                        lon=data.get('lon'),
+                        region_id=data.get('region_id'),
+                        timestamp=current_time
+                    )
+                    
                     # Update location and get triggers
-                    triggers = await service.check_proximity_triggers(lat, lon, current_user.id)
+                    triggers = await service.check_proximity_triggers(
+                        location_update.lat, 
+                        location_update.lon, 
+                        current_user.id
+                    )
                     
                     # Update location tracking in both managers
-                    await manager.update_user_location(current_user.id, lat, lon, region_id)
+                    await manager.update_user_location(
+                        current_user.id, 
+                        location_update.lat, 
+                        location_update.lon, 
+                        location_update.region_id
+                    )
                     
                     # Send triggers and status back to the user
                     await websocket.send_json({
@@ -516,6 +544,13 @@ async def websocket_endpoint(
                     })
                     
                     last_update = current_time
+                    
+                except ValueError as e:
+                    # Handle validation errors
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": str(e)
+                    })
             
             except Exception as e:
                 logger.error(f"Error processing location update: {e}")
@@ -525,7 +560,7 @@ async def websocket_endpoint(
                 })
     
     except WebSocketDisconnect:
-        await manager.disconnect(websocket, current_user.id)
+        await manager.disconnect(current_user.id)
         location_manager.unregister_connection(current_user.id)
     
     finally:
@@ -808,4 +843,56 @@ async def update_location_config(
         success=True,
         message="Location configuration updated",
         data=config
+    )
+
+@router.get("/pois/{poi_id}/version", response_model=ResponseModel[dict])
+async def check_poi_version(
+    poi_id: str,
+    client_version: int = Query(..., description="Client's current content version"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> ResponseModel[dict]:
+    """Check if client has latest POI content version"""
+    poi = db.query(PointOfInterest).filter(PointOfInterest.id == poi_id).first()
+    if not poi:
+        raise HTTPException(status_code=404, detail="POI not found")
+        
+    version_info = poi.get_version_info()
+    needs_update = not poi.validate_content_version(client_version)
+    
+    return ResponseModel(
+        success=True,
+        message="Version check complete",
+        data={
+            "needs_update": needs_update,
+            "version_info": version_info
+        }
+    )
+
+@router.post("/pois/{poi_id}/content", response_model=ResponseModel[dict])
+async def update_poi_content(
+    poi_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+    cache: RedisCache = Depends()
+) -> ResponseModel[dict]:
+    """Update POI content and increment version"""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    poi = db.query(PointOfInterest).filter(PointOfInterest.id == poi_id).first()
+    if not poi:
+        raise HTTPException(status_code=404, detail="POI not found")
+    
+    # Update version and invalidate cache
+    poi.update_content_version()
+    background_tasks.add_task(cache.invalidate_poi_content, poi_id)
+    
+    db.commit()
+    
+    return ResponseModel(
+        success=True,
+        message="POI content updated successfully",
+        data=poi.get_version_info()
     )

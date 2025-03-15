@@ -1,9 +1,9 @@
-from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from contextlib import asynccontextmanager
-from .database.config import engine, get_db
+from .database.config import engine, get_db, SessionLocal
 from .models import user, progress, content, arcgis_usage
 from .routers import auth, progress as progress_router, map, conversation
 from .core.config import get_settings
@@ -11,10 +11,16 @@ from .services.arcgis import ArcGISService
 from .services.sync_manager import SyncManager
 from .services.websocket import ConnectionManager, manager
 from .services.location_manager import location_manager
-from .auth.utils import get_current_user, get_current_active_user
+from .auth.utils import get_current_user, get_current_active_user, oauth2_scheme
 from .models.user import User
 from starlette.websockets import WebSocketState
 from jose import JWTError, jwt
+import json
+import logging
+import asyncio
+from typing import Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 # Get settings instance
 settings = get_settings()
@@ -81,81 +87,81 @@ app.include_router(
     tags=["map"]
 )
 
-# Register WebSocket endpoint directly
+async def get_websocket_user(websocket: WebSocket) -> User:
+    try:
+        auth_header = websocket.headers.get('authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Not authenticated")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated"
+            )
+            
+        token = auth_header.split(' ')[1]
+        try:
+            payload = jwt.decode(
+                token, 
+                settings.JWT_SECRET_KEY,  # Using JWT_SECRET_KEY consistently
+                algorithms=[settings.JWT_ALGORITHM]
+            )
+            username: str = payload.get("sub")
+            if username is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Could not validate credentials"
+                )
+        except JWTError as e:
+            logger.error(f"JWT validation error: {str(e)}")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials"
+            )
+            
+        db = SessionLocal()
+        try:
+            user = await get_current_user(token, db)
+            if not user:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="User not found")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="User not found"
+                )
+            return user
+        finally:
+            db.close()
+            
+    except HTTPException as e:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e.detail))
+        raise
+    except Exception as e:
+        logger.error(f"WebSocket authentication error: {str(e)}")
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Internal server error")
+        raise
+
 @app.websocket("/ws/location")
 async def websocket_endpoint(
     websocket: WebSocket,
-    db: Session = Depends(get_db)
+    user: User = Depends(get_websocket_user)
 ):
-    """WebSocket endpoint for real-time location updates"""
     try:
-        # Accept the connection first
         await websocket.accept()
+        await manager.connect(websocket, user.id)
         
-        # Get auth token from headers
-        token = None
-        if "authorization" in websocket.headers:
-            auth = websocket.headers["authorization"]
-            scheme, token = auth.split()
-            if scheme.lower() != "bearer":
-                await websocket.close(code=4001, reason="Invalid authentication scheme")
-                return
-        
-        if not token:
-            await websocket.close(code=4001, reason="Missing authentication token")
-            return
-            
-        # Validate user using token verification logic
-        try:
-            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-            email = payload.get("sub")
-            if email is None:
-                await websocket.close(code=4001, reason="Invalid token payload")
-                return
-                
-            user = db.query(User).filter(User.email == email).first()
-            if user is None:
-                await websocket.close(code=4001, reason="User not found")
-                return
-                
-            if not user.is_active:
-                await websocket.close(code=4001, reason="User is inactive")
-                return
-                
-            current_user = user
-                
-        except JWTError:
-            await websocket.close(code=4001, reason="Invalid token")
-            return
-            
-        # Register connection with manager (no accept needed)
-        await manager.connect(websocket, current_user.id)
-        
-        try:
-            while True:
+        while True:
+            try:
                 data = await websocket.receive_json()
-                if websocket.client_state == WebSocketState.DISCONNECTED:
-                    break
-                    
-                update_result = await manager.update_user_location(
-                    current_user.id,
-                    data.get('lat'),
-                    data.get('lon'),
-                    data.get('region_id')
-                )
-                if websocket.client_state != WebSocketState.DISCONNECTED:
-                    await websocket.send_json(update_result)
-                    
-        except WebSocketDisconnect:
-            await manager.disconnect(current_user.id)
-        except Exception as e:
-            await manager.disconnect(current_user.id)
-            if websocket.client_state != WebSocketState.DISCONNECTED:
+                result = await manager.update_user_location(user.id, data.get('lat'), data.get('lon'), data.get('region_id'))
+                await websocket.send_json(result)
+            except json.JSONDecodeError:
+                await websocket.close(code=4000, reason="Invalid JSON")
+            except Exception as e:
+                logger.error(f"WebSocket error: {str(e)}")
                 await websocket.close(code=4000, reason=str(e))
-            
-    except Exception as e:
-        if websocket.client_state != WebSocketState.DISCONNECTED:
-            await websocket.close(code=4000, reason=str(e))
+                break
+                
+    except WebSocketDisconnect:
+        await manager.disconnect(user.id)
 
 @app.on_event("startup")
 async def startup_event():

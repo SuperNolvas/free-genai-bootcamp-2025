@@ -93,3 +93,24 @@ class PointOfInterest(Base):
             return actual_score >= required_score
             
         return False
+
+    def update_content_version(self):
+        """Increment content version and update sync metadata"""
+        self.content_version += 1
+        self.sync_metadata = {
+            "last_sync": str(func.now()),
+            "version": str(self.content_version),
+            "update_type": "content"
+        }
+    
+    def validate_content_version(self, client_version: int) -> bool:
+        """Check if client has latest content version"""
+        return client_version == self.content_version
+    
+    def get_version_info(self) -> dict:
+        """Get version information including sync status"""
+        return {
+            "current_version": self.content_version,
+            "last_sync": self.sync_metadata.get("last_sync") if self.sync_metadata else None,
+            "update_type": self.sync_metadata.get("update_type") if self.sync_metadata else None
+        }

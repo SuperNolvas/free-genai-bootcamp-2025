@@ -45,6 +45,8 @@ class POIResponse(POIBase):
     metadata: Dict = Field(default_factory=dict, description="Additional POI metadata")
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    content_version: int = Field(1, description="Current content version")
+    sync_metadata: Optional[Dict] = Field(None, description="Sync and version metadata")
 
 class POICreate(POIBase):
     pass  # All fields from POIBase are required for creation
@@ -81,25 +83,16 @@ class LocalContext(BaseModel):
         description="Projected difficulty levels for next visits"
     )
 
+class VersionInfo(BaseModel):
+    current_version: int = Field(..., description="Current content version")
+    last_sync: Optional[str] = Field(None, description="Timestamp of last sync")
+    update_type: Optional[str] = Field(None, description="Type of last update")
+
 class ContentDeliveryResponse(BaseModel):
-    vocabulary: List[ContentItem] = Field(
-        default_factory=list,
-        description="Relevant vocabulary items for this POI"
-    )
-    phrases: List[ContentItem] = Field(
-        default_factory=list,
-        description="Useful phrases for this POI context"
-    )
-    dialogues: List[ContentItem] = Field(
-        default_factory=list,
-        description="Practice dialogues for this POI context"
-    )
-    cultural_notes: List[ContentItem] = Field(
-        default_factory=list,
-        description="Cultural information relevant to this POI"
-    )
+    vocabulary: List[ContentItem] = Field(default_factory=list)
+    phrases: List[ContentItem] = Field(default_factory=list)
+    dialogues: List[ContentItem] = Field(default_factory=list)
+    cultural_notes: List[ContentItem] = Field(default_factory=list)
     difficulty_level: float = Field(..., ge=0, le=100)
-    local_context: LocalContext = Field(
-        default_factory=dict,
-        description="Local context information like dialect, formality level"
-    )
+    local_context: LocalContext = Field(default_factory=dict)
+    version_info: VersionInfo = Field(...)

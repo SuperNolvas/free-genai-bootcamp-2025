@@ -504,3 +504,49 @@ async def test_difficulty_adaptation(async_client, test_user, test_poi, test_con
     factors = response.json()["data"]["local_context"]["difficulty_factors"]
     assert factors["mastery_factor"] > 0  # Should have positive mastery impact
     assert factors["visit_factor"] > 0  # Should have positive visit impact
+
+@pytest.mark.asyncio
+async def test_version_control(async_client, test_user, test_poi, test_content, test_db: Session):
+    """Test POI content version control functionality"""
+    # Login
+    response = await async_client.post("/api/v1/auth/token", data={
+        "username": test_user.email,
+        "password": "testpass123"
+    })
+    assert response.status_code == 200
+    token = response.json()["access_token"]
+    
+    # Initial version check
+    response = await async_client.get(
+        f"/api/v1/map/pois/{test_poi.id}/version",
+        params={"client_version": 1},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert not data["needs_update"]
+    
+    # Make test user an admin for content update
+    test_user.is_admin = True
+    test_db.commit()
+    
+    # Update content version
+    response = await async_client.post(
+        f"/api/v1/map/pois/{test_poi.id}/content",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["current_version"] == 2
+    
+    # Verify version mismatch is detected
+    response = await async_client.get(
+        f"/api/v1/map/pois/{test_poi.id}/content",
+        params={
+            "language": "ja",
+            "proficiency_level": 50,
+            "client_version": 1
+        },
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 409  # Version mismatch error

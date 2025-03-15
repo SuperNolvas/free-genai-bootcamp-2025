@@ -14,15 +14,22 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     
     # Authentication
-    JWT_SECRET_KEY: str
+    JWT_SECRET_KEY: str = "development-secret-key-change-in-production"
+    SECRET_KEY: str = "development-secret-key-change-in-production"  # For backwards compatibility
     JWT_ALGORITHM: str = "HS256"
+    ALGORITHM: str = "HS256"  # For backwards compatibility
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # Database
     DATABASE_URL: str
     
     # Redis
-    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_URL: str = "redis://redis:6379/0"
+    
+    # Redis settings
+    REDIS_HOST: str = "redis"  # Docker service name
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
     
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
@@ -56,6 +63,12 @@ class Settings(BaseSettings):
         case_sensitive=True,
         extra="allow"  # Allow extra fields in environment
     )
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Ensure SECRET_KEY is set for backwards compatibility
+        if not hasattr(self, 'SECRET_KEY') and hasattr(self, 'JWT_SECRET_KEY'):
+            self.SECRET_KEY = self.JWT_SECRET_KEY
 
 @lru_cache()
 def get_settings() -> Settings:

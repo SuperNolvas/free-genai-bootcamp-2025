@@ -14,7 +14,7 @@ python-dotenv>=1.0.0
 # Database and Cache
 sqlalchemy>=2.0.23
 psycopg2-binary>=2.9.9
-redis>=5.0.1
+redis[hiredis]>=5.0.1  # Updated to include hiredis for better performance
 alembic>=1.12.1
 
 # HTTP and Async
