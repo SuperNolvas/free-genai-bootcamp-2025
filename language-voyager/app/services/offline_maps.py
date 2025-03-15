@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from ..models.region import Region
 from ..models.poi import PointOfInterest
 from ..models.progress import UserProgress
+from ..models.achievement import Achievement
 from ..services.arcgis import ArcGISService
 from ..services.cache import cache
 from ..core.config import get_settings

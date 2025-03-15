@@ -10,6 +10,7 @@ from ..database.config import get_db
 from ..models.user import User
 from ..models.progress import UserProgress
 from ..models.poi import PointOfInterest
+from ..models.region import Region
 from ..auth.utils import get_current_active_user
 from ..core.schemas import ResponseModel
 from .schemas.progress import (
@@ -229,6 +230,11 @@ async def complete_poi_content(
     if not poi:
         raise HTTPException(status_code=404, detail="POI not found")
 
+    # Get POI's region to determine language
+    region = db.query(Region).filter(Region.id == poi.region_id).first()
+    if not region:
+        raise HTTPException(status_code=404, detail="Region not found")
+
     # Get or create progress record
     progress = db.query(UserProgress).filter(
         UserProgress.user_id == current_user.id,
@@ -240,7 +246,7 @@ async def complete_poi_content(
             user_id=current_user.id,
             region_id=poi.region_id,
             region_name=poi.region_id,  # Set both for backward compatibility
-            language=language,
+            language=region.region_metadata.get("language", "ja"),  # Default to Japanese if not specified
             proficiency_level=0.0,
             completed_challenges=[],
             vocabulary_mastered={},
