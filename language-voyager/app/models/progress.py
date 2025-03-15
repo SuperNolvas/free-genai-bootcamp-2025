@@ -10,7 +10,7 @@ class UserProgress(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     region_id = Column(String, ForeignKey("regions.id"))
     language = Column(String)  # e.g., "japanese", "korean"
-    region = Column(String)    # e.g., "tokyo", "kansai"
+    region_name = Column(String)    # renamed from region to avoid conflict
     proficiency_level = Column(Float)  # Decimal score of proficiency
     completed_challenges = Column(JSON)  # Store completed challenge IDs and scores
     vocabulary_mastered = Column(JSON)  # Store mastered vocabulary with timestamps
@@ -25,4 +25,5 @@ class UserProgress(Base):
     
     # Relationships
     user = relationship("User", back_populates="progress")
-    region = relationship("Region", back_populates="user_progress")
+    region = relationship("Region", back_populates="user_progress", foreign_keys=[region_id])
+    completed_pois = relationship("PointOfInterest", back_populates="progress_records")

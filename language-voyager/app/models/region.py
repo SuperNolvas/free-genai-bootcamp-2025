@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, JSON, func
+from sqlalchemy.orm import relationship
 from ..database.config import Base
 
 class Region(Base):
@@ -19,3 +20,7 @@ class Region(Base):
     recommended_level = Column(Float, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    user_progress = relationship("UserProgress", back_populates="region")
+    points_of_interest = relationship("PointOfInterest", back_populates="region")

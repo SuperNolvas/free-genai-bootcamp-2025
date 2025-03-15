@@ -35,7 +35,7 @@ class PointOfInterest(Base):
     
     # Relationships
     region = relationship("Region", back_populates="points_of_interest")
-    progress_records = relationship("Progress", back_populates="point_of_interest")
+    progress_records = relationship("UserProgress", back_populates="completed_pois")
     
     def to_dict(self):
         """Convert POI to dictionary format"""

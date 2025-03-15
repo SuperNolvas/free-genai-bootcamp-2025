@@ -89,14 +89,14 @@ async def update_progress(
     progress = db.query(UserProgress).filter(
         UserProgress.user_id == current_user.id,
         UserProgress.language == update.language,
-        UserProgress.region == update.region
+        UserProgress.region_name == update.region
     ).first()
     
     if not progress:
         progress = UserProgress(
             user_id=current_user.id,
             language=update.language,
-            region=update.region,
+            region_name=update.region,
             proficiency_level=update.score,
             completed_challenges=[update.metadata] if update.metadata else [],
             vocabulary_mastered={},
@@ -181,28 +181,28 @@ async def get_language_progress(
         data=response_data
     )
 
-@router.get("/region/{region}", response_model=ResponseModel[List[ProgressResponse]])
+@router.get("/region/{region_name}", response_model=ResponseModel[List[ProgressResponse]])
 async def get_region_progress(
-    region: str,
+    region_name: str,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     progress = db.query(UserProgress).filter(
         UserProgress.user_id == current_user.id,
-        UserProgress.region == region
+        UserProgress.region_name == region_name
     ).all()
     
     if not progress:
         return ResponseModel(
             success=True,
-            message=f"No progress found for region: {region}",
+            message=f"No progress found for region: {region_name}",
             data=[]
         )
     
     response_data = [
         ProgressResponse(
             language=p.language,
-            region=p.region,
+            region=p.region_name,
             proficiency_level=p.proficiency_level,
             completed_challenges=[c["id"] for c in p.completed_challenges if "id" in c],
             achievements=[],  # Will be implemented with achievement system
@@ -212,7 +212,7 @@ async def get_region_progress(
     
     return ResponseModel(
         success=True,
-        message=f"Progress retrieved for region: {region}",
+        message=f"Progress retrieved for region: {region_name}",
         data=response_data
     )
 
@@ -232,10 +232,25 @@ async def complete_poi_content(
     # Get or create progress record
     progress = db.query(UserProgress).filter(
         UserProgress.user_id == current_user.id,
-        UserProgress.region == poi.region_id
+        UserProgress.region_id == poi.region_id
     ).first()
+
     if not progress:
-        raise HTTPException(status_code=400, detail="No progress record found for this region")
+        progress = UserProgress(
+            user_id=current_user.id,
+            region_id=poi.region_id,
+            region_name=poi.region_id,  # Set both for backward compatibility
+            language=language,
+            proficiency_level=0.0,
+            completed_challenges=[],
+            vocabulary_mastered={},
+            last_location="",
+            poi_progress={},
+            content_mastery={},
+            achievements=[]
+        )
+        db.add(progress)
+        db.commit()
 
     logger.info(f"Initial progress state - poi_progress: {progress.poi_progress}, achievements: {progress.achievements}")
 

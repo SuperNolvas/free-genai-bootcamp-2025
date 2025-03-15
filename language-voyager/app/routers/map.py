@@ -49,7 +49,7 @@ async def list_available_regions(
     
     # Get user's progress for all regions
     progress_records = {
-        p.region: p for p in db.query(UserProgress).filter(
+        p.region_name: p for p in db.query(UserProgress).filter(
             UserProgress.user_id == current_user.id
         ).all()
     }
@@ -299,14 +299,14 @@ async def get_poi_content(
     progress = db.query(UserProgress).filter(
         UserProgress.user_id == current_user.id,
         UserProgress.language == language,
-        UserProgress.region == region.id
+        UserProgress.region_name == region.id
     ).first()
 
     if not progress:
         progress = UserProgress(
             user_id=current_user.id,
             language=language,
-            region=region.id,
+            region_name=region.id,
             proficiency_level=proficiency_level,
             poi_progress={},
             content_mastery={},
@@ -667,7 +667,7 @@ async def get_nearby_regions(
         data=nearby
     )
 
-@router.get("/regions/{region_id}/analytics", response_model=ResponseModel)
+@router.get("/regions/{region_id}/region-analytics")  # Changed path to avoid operation ID conflict
 async def get_region_analytics(
     region_id: str,
     current_user: User = Depends(get_current_active_user),
