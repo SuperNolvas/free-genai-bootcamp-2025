@@ -1665,5 +1665,7 @@ Legend:
 docker exec -it language-voyager-web-1 wscat -c "ws://web:8000/ws/location" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0MkBleGFtcGxlLmNvbSIsImV4cCI6MTc0MjA3MjczNn0.oT1TV3FJyFrCRnTqdY28M_UpU-mbFrv0pjEgD4q8Du0"
 Connected (press CTRL+C to quit)
 < {"type":"connected","message":"Successfully connected to location service","user_id":3}
+> {"action": "get_status"}
+< {"success":true}
 > 
 ```
