@@ -20,7 +20,8 @@ class OfflineMapService:
         self,
         region_id: str,
         bounds: Dict,
-        zoom_levels: List[int] = [12, 13, 14, 15, 16]
+        zoom_levels: List[int] = [12, 13, 14, 15, 16],
+        user_id: Optional[str] = None
     ) -> Dict:
         """
         Prepare an offline package for a region including:
@@ -28,16 +29,26 @@ class OfflineMapService:
         - POI data
         - Region metadata
         - User progress data
+        - Achievements data
+        - Content versions
         """
         # Get region data
         region = self.db.query(Region).filter(Region.id == region_id).first()
         if not region:
             raise ValueError(f"Region {region_id} not found")
 
-        # Get POIs for region
+        # Get POIs with content versions
         pois = self.db.query(PointOfInterest).filter(
             PointOfInterest.region_id == region_id
         ).all()
+        
+        # Get achievements if user_id is provided
+        achievements = []
+        if user_id:
+            achievements = self.db.query(Achievement).filter(
+                Achievement.user_id == user_id,
+                Achievement.region_id == region_id
+            ).all()
 
         # Get map tiles package from ArcGIS
         tile_package = await self.arcgis_service.generate_tile_package(
@@ -46,11 +57,14 @@ class OfflineMapService:
         )
 
         # Get user progress data for offline sync
-        progress_records = self.db.query(UserProgress).filter(
+        progress_query = self.db.query(UserProgress).filter(
             UserProgress.region_id == region_id
-        ).all()
+        )
+        if user_id:
+            progress_query = progress_query.filter(UserProgress.user_id == user_id)
+        progress_records = progress_query.all()
 
-        # Prepare offline package
+        # Prepare offline package with content versions
         offline_package = {
             "region": {
                 "id": region.id,
@@ -58,24 +72,31 @@ class OfflineMapService:
                 "local_name": region.local_name,
                 "bounds": region.bounds,
                 "center": region.center,
-                "metadata": region.region_metadata
+                "metadata": region.region_metadata,
+                "content_version": region.content_version
             },
-            "pois": [poi.to_dict() for poi in pois],
+            "pois": [{
+                **poi.to_dict(),
+                "content_version": poi.content_version
+            } for poi in pois],
+            "achievements": [achievement.to_dict() for achievement in achievements],
             "tile_package": tile_package,
             "progress": [p.to_dict() for p in progress_records],
             "timestamp": datetime.utcnow().isoformat(),
             "zoom_levels": zoom_levels,
-            "version": "2.0"
+            "version": "2.1"  # Incrementing version for achievement support
         }
-
+        
         # Cache the package
         cache_key = f"offline_package:{region_id}"
+        if user_id:
+            cache_key = f"{cache_key}:user:{user_id}"
+            
         await cache.set(
             cache_key,
             json.dumps(offline_package),
             expire=settings.OFFLINE_PACKAGE_TTL
         )
-
         return offline_package
 
     async def get_cached_package(self, region_id: str) -> Optional[Dict]:
@@ -137,6 +158,7 @@ class OfflineMapService:
             region_id: The region ID to sync
             offline_data: Dict containing:
                 - progress_updates: List of progress records
+                - achievement_updates: List of achievement records
                 - last_sync_timestamp: Last sync timestamp
                 - pending_downloads: List of pending tile downloads
         """
@@ -151,22 +173,33 @@ class OfflineMapService:
             for progress in progress_updates:
                 await self._merge_progress_update(progress)
 
+            # Process achievement updates
+            achievement_updates = offline_data.get("achievement_updates", [])
+            for achievement in achievement_updates:
+                await self._merge_achievement_update(achievement)
+
             # Handle pending downloads
             pending_downloads = offline_data.get("pending_downloads", [])
             if pending_downloads:
                 await self._process_pending_downloads(region_id, pending_downloads)
 
+            # Check content versions and notify of any updates
+            content_updates = await self._check_content_versions(
+                region_id,
+                offline_data.get("content_versions", {})
+            )
+
             # Get updated server state after processing changes
             updated_package = await self.get_cached_package(region_id)
-
             return {
                 "status": "synced",
                 "timestamp": datetime.utcnow().isoformat(),
                 "changes_processed": len(progress_updates),
+                "achievements_processed": len(achievement_updates),
                 "downloads_processed": len(pending_downloads),
+                "content_updates": content_updates,
                 "current_package": updated_package
             }
-
         except Exception as e:
             return {
                 "status": "error",
@@ -185,6 +218,36 @@ class OfflineMapService:
         )
         self.db.merge(progress)
         self.db.commit()
+
+    async def _merge_achievement_update(self, achievement_data: Dict):
+        """Merge an achievement update from offline data"""
+        achievement = Achievement(
+            user_id=achievement_data["user_id"],
+            region_id=achievement_data["region_id"],
+            achievement_type=achievement_data["type"],
+            status=achievement_data["status"],
+            progress=achievement_data["progress"],
+            completed_at=datetime.fromisoformat(achievement_data["timestamp"]) if achievement_data.get("timestamp") else None
+        )
+        self.db.merge(achievement)
+        self.db.commit()
+
+    async def _check_content_versions(self, region_id: str, client_versions: Dict) -> Dict:
+        """Check for content version mismatches"""
+        region = self.db.query(Region).filter(Region.id == region_id).first()
+        pois = self.db.query(PointOfInterest).filter(
+            PointOfInterest.region_id == region_id
+        ).all()
+
+        updates_needed = {
+            "region": region.content_version != client_versions.get("region"),
+            "pois": [
+                poi.id for poi in pois
+                if poi.content_version != client_versions.get(f"poi:{poi.id}")
+            ]
+        }
+
+        return updates_needed
 
     async def _process_pending_downloads(self, region_id: str, pending_downloads: List[Dict]):
         """Process any pending tile or POI downloads"""

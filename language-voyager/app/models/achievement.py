@@ -24,6 +24,41 @@ class Achievement(Base):
     def is_completed(self):
         return self.progress >= 100 and self.completed_at is not None
 
+    @classmethod
+    def get_language_achievements(cls, language_code: str):
+        """Define language-specific achievement templates"""
+        return [
+            {
+                "id": f"vocab_mastery_{language_code}",
+                "name": f"Vocabulary Master ({language_code})",
+                "description": "Master 1000 vocabulary words",
+                "type": "language_proficiency",
+                "target": 1000,
+                "metadata": {"type": "vocabulary", "language": language_code}
+            },
+            {
+                "id": f"dialect_explorer_{language_code}",
+                "name": f"Dialect Explorer ({language_code})",
+                "description": "Interact with speakers from 5 different regions",
+                "type": "language_proficiency",
+                "target": 5,
+                "metadata": {"type": "regional_dialect", "language": language_code}
+            },
+            {
+                "id": f"conversation_master_{language_code}",
+                "name": f"Conversation Master ({language_code})",
+                "description": "Complete 50 contextual conversations",
+                "type": "language_proficiency",
+                "target": 50,
+                "metadata": {"type": "conversation", "language": language_code}
+            }
+        ]
+
+    @classmethod
+    def calculate_progress(cls, stats, achievement_type):
+        """Calculate achievement progress based on user stats"""
+        # ...existing code...
+
 class AchievementDefinition(Base):
     __tablename__ = "achievement_definitions"
 

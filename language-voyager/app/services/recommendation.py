@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from ..models.content import LanguageContent
 from ..models.progress import UserProgress
 from ..models.poi import PointOfInterest
+from ..models.achievement import Achievement, AchievementDefinition
 
 class ContentRecommender:
     @staticmethod
@@ -90,3 +91,93 @@ class ContentRecommender:
         
         # Return top N recommendations
         return [r["content"] for r in recommendations[:limit]]
+
+class LanguageProgressService:
+    def __init__(self, db: Session):
+        self.db = db
+
+    async def update_language_progress(self, user_id: int, language_code: str, activity_data: Dict):
+        """
+        Update user's language progress and check for achievements
+        """
+        progress = self._get_or_create_progress(user_id, language_code)
+        
+        # Update progress based on activity
+        if activity_data.get("type") == "vocabulary":
+            progress.vocabulary_count += 1
+        elif activity_data.get("type") == "conversation":
+            progress.conversation_count += 1
+        elif activity_data.get("type") == "regional_interaction":
+            if activity_data["region_id"] not in progress.visited_regions:
+                progress.visited_regions.append(activity_data["region_id"])
+        
+        self.db.commit()
+        
+        # Check and award achievements
+        await self._check_achievements(user_id, language_code, progress)
+    
+    def _get_or_create_progress(self, user_id: int, language_code: str) -> UserProgress:
+        progress = self.db.query(UserProgress).filter(
+            UserProgress.user_id == user_id,
+            UserProgress.language_code == language_code
+        ).first()
+        
+        if not progress:
+            progress = UserProgress(
+                user_id=user_id,
+                language_code=language_code,
+                vocabulary_count=0,
+                conversation_count=0,
+                visited_regions=[]
+            )
+            self.db.add(progress)
+            
+        return progress
+    
+    async def _check_achievements(self, user_id: int, language_code: str, progress: UserProgress):
+        """Check and award language-specific achievements"""
+        achievements = Achievement.get_language_achievements(language_code)
+        
+        for achievement_template in achievements:
+            existing = self.db.query(Achievement).filter(
+                Achievement.user_id == user_id,
+                Achievement.achievement_id == achievement_template["id"]
+            ).first()
+            
+            if existing and existing.is_completed:
+                continue
+                
+            current_progress = self._calculate_achievement_progress(
+                achievement_template, 
+                progress
+            )
+            
+            if not existing:
+                achievement = Achievement(
+                    user_id=user_id,
+                    type=achievement_template["type"],
+                    achievement_id=achievement_template["id"],
+                    progress=current_progress,
+                    achievement_metadata=achievement_template["metadata"]
+                )
+                self.db.add(achievement)
+            else:
+                existing.progress = current_progress
+                
+            self.db.commit()
+    
+    def _calculate_achievement_progress(self, template: Dict, progress: UserProgress) -> int:
+        """Calculate progress percentage for an achievement"""
+        metadata = template["metadata"]
+        target = template["target"]
+        
+        if metadata["type"] == "vocabulary":
+            current = progress.vocabulary_count
+        elif metadata["type"] == "conversation":
+            current = progress.conversation_count
+        elif metadata["type"] == "regional_dialect":
+            current = len(progress.visited_regions)
+        else:
+            return 0
+            
+        return min(100, int((current / target) * 100))

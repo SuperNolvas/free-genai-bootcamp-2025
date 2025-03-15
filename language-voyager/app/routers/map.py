@@ -681,3 +681,48 @@ async def get_region_analytics(
         message="Region analytics retrieved successfully",
         data=analytics
     )
+
+class GeolocationConfig(BaseModel):
+    minAccuracy: float = 20.0  # meters
+    maxAccuracy: float = 100.0  # meters
+    updateInterval: float = 5.0  # seconds
+    backgroundMode: bool = False
+    powerSaveMode: bool = False
+
+@router.get("/location/config")
+async def get_location_config(
+    current_user: User = Depends(get_current_active_user)
+) -> ResponseModel[GeolocationConfig]:
+    """Get geolocation configuration parameters"""
+    config = GeolocationConfig()
+    if hasattr(current_user, 'location_preferences'):
+        # Override defaults with user preferences if they exist
+        for key, value in current_user.location_preferences.items():
+            if hasattr(config, key):
+                setattr(config, key, value)
+    
+    return ResponseModel(
+        success=True,
+        message="Location configuration retrieved",
+        data=config
+    )
+
+@router.post("/location/config")
+async def update_location_config(
+    config: GeolocationConfig,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> ResponseModel[GeolocationConfig]:
+    """Update user's geolocation preferences"""
+    if not hasattr(current_user, 'location_preferences'):
+        current_user.location_preferences = {}
+    
+    current_user.location_preferences.update(config.model_dump())
+    flag_modified(current_user, "location_preferences")
+    db.commit()
+    
+    return ResponseModel(
+        success=True,
+        message="Location configuration updated",
+        data=config
+    )
