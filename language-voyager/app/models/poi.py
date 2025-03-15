@@ -2,6 +2,7 @@ from sqlalchemy import Column, String, Integer, Float, JSON, ForeignKey, DateTim
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..database.config import Base
+from .progress import progress_poi_association
 import uuid
 
 class PointOfInterest(Base):
@@ -35,7 +36,11 @@ class PointOfInterest(Base):
     
     # Relationships
     region = relationship("Region", back_populates="points_of_interest")
-    progress_records = relationship("UserProgress", back_populates="completed_pois")
+    progress_records = relationship(
+        "UserProgress",
+        secondary=progress_poi_association,
+        back_populates="completed_pois"
+    )
     
     def to_dict(self):
         """Convert POI to dictionary format"""

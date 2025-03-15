@@ -8,6 +8,7 @@ from ..models.progress import UserProgress
 from ..services.arcgis import ArcGISService
 from ..services.cache import cache
 from ..core.config import get_settings
+from .local_storage import LocalStorageService
 
 settings = get_settings()
 
@@ -15,6 +16,7 @@ class OfflineMapService:
     def __init__(self, db: Session):
         self.db = db
         self.arcgis_service = ArcGISService(db)
+        self.storage = LocalStorageService(db)
 
     async def prepare_offline_package(
         self,

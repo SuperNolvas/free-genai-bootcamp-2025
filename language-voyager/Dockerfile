@@ -6,7 +6,14 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     gcc \
     python3-dev \
+    build-essential \
+    curl \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
+
+# Install wscat for WebSocket testing
+RUN npm install -g wscat
 
 WORKDIR /app
 

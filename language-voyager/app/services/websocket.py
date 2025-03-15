@@ -1,5 +1,5 @@
 from fastapi import WebSocket
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 import json
 import asyncio
 from datetime import datetime
@@ -8,6 +8,7 @@ from math import isfinite
 from app.core.config import get_settings
 import redis
 from geopy.distance import geodesic
+from starlette.websockets import WebSocketState
 
 settings = get_settings()
 
@@ -45,11 +46,17 @@ class ConnectionManager:
         self.redis_client = redis.from_url(settings.REDIS_URL)
         
     async def connect(self, websocket: WebSocket, user_id: int):
-        await websocket.accept()
+        """Register a WebSocket connection and send welcome message"""
         self.active_connections[user_id] = websocket
+        await websocket.send_json({
+            "type": "connected",
+            "message": "Successfully connected to location service",
+            "user_id": user_id
+        })
         
-    def disconnect(self, user_id: int):
-        self.active_connections.pop(user_id, None)
+    async def disconnect(self, user_id: int):
+        """Handle disconnection cleanup"""
+        websocket = self.active_connections.pop(user_id, None)
         location = self.user_locations.pop(user_id, None)
         if location:
             region_id = location.get('region_id')

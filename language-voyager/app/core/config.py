@@ -2,6 +2,7 @@ from pydantic_settings import BaseSettings
 from typing import List, Optional
 from functools import lru_cache
 from pydantic import ConfigDict
+from pathlib import Path
 
 class Settings(BaseSettings):
     # Environment
@@ -41,6 +42,14 @@ class Settings(BaseSettings):
     LOCATION_UPDATE_BURST_LIMIT: int = 5  # Maximum burst updates allowed
     LOCATION_UPDATE_BURST_PERIOD: int = 60  # Period (in seconds) for burst limit
     LOCATION_CHANGE_MIN_DISTANCE: float = 1.0  # Minimum distance (meters) required between updates
+
+    # Offline storage settings
+    LOCAL_STORAGE_PATH: str = str(Path.home() / ".language-voyager" / "storage")
+    OFFLINE_PACKAGE_TTL: int = 86400  # 24 hours in seconds
+    MAX_OFFLINE_STORAGE_SIZE: int = 1024 * 1024 * 1024  # 1GB
+    SYNC_RETRY_ATTEMPTS: int = 3
+    SYNC_RETRY_DELAY: int = 5  # seconds
+    MIN_SYNC_INTERVAL: int = 300  # 5 minutes between syncs
 
     model_config = ConfigDict(
         env_file=".env",

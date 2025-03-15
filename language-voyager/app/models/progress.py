@@ -1,11 +1,20 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, JSON, Table
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from ..database.config import Base
 
+# Join table for UserProgress and PointOfInterest with explicit foreign key constraints
+progress_poi_association = Table(
+    'progress_poi_association',
+    Base.metadata,
+    Column('progress_id', Integer, ForeignKey('user_progress.id', ondelete='CASCADE'), primary_key=True),
+    Column('poi_id', String, ForeignKey('points_of_interest.id', ondelete='CASCADE'), primary_key=True)
+)
+
 class UserProgress(Base):
     __tablename__ = "user_progress"
+    
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     region_id = Column(String, ForeignKey("regions.id"))
@@ -26,4 +35,9 @@ class UserProgress(Base):
     # Relationships
     user = relationship("User", back_populates="progress")
     region = relationship("Region", back_populates="user_progress", foreign_keys=[region_id])
-    completed_pois = relationship("PointOfInterest", back_populates="progress_records")
+    completed_pois = relationship(
+        "PointOfInterest",
+        secondary=progress_poi_association,
+        back_populates="progress_records",
+        lazy="joined"  # Optimize loading
+    )

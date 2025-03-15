@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 from typing import Dict, List, Optional
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+import logging
 from ..database.config import get_db
 from ..services.arcgis import ArcGISService
 from ..auth.utils import get_current_active_user
@@ -18,7 +19,10 @@ from ..services.cache import cache
 from ..services.recommendation import ContentRecommender
 from ..services.websocket import manager
 from ..services.offline_maps import OfflineMapService
+from ..services.location_manager import location_manager
 import asyncio
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/map",
@@ -450,42 +454,83 @@ def _determine_formality_level(poi_type: str) -> str:
 async def websocket_endpoint(
     websocket: WebSocket,
     current_user: User = Depends(get_current_active_user),
-    service: ArcGISService = Depends(get_arcgis_service)
+    service: ArcGISService = Depends(get_arcgis_service),
+    db: Session = Depends(get_db)
 ):
+    # Register connection with both managers
     await manager.connect(websocket, current_user.id)
+    location_manager.register_connection(current_user.id, websocket)
     last_update = datetime.utcnow().timestamp()
     
     try:
         while True:
-            data = await websocket.receive_json()
-            
-            # Rate limiting check
-            current_time = datetime.utcnow().timestamp()
-            if current_time - last_update < LOCATION_UPDATE_MIN_INTERVAL:
-                continue
-            
-            lat = data.get('lat')
-            lon = data.get('lon')
-            region_id = data.get('region_id')
-            
-            if all(x is not None for x in (lat, lon, region_id)):
-                # Update location and get triggers
-                triggers = await service.check_proximity_triggers(lat, lon, current_user.id)
+            try:
+                data = await websocket.receive_json()
                 
-                # Update WebSocket manager's location tracking
-                await manager.update_user_location(current_user.id, lat, lon, region_id)
+                # Rate limiting check
+                current_time = datetime.utcnow().timestamp()
+                if current_time - last_update < LOCATION_UPDATE_MIN_INTERVAL:
+                    continue
                 
-                # Send triggers back to the user
+                if "error" in data:
+                    # Handle location errors
+                    error_response = await location_manager.handle_location_error(
+                        current_user.id,
+                        data["error"].get("code", "UNKNOWN"),
+                        data["error"].get("message", "Unknown error")
+                    )
+                    await websocket.send_json({
+                        "type": "error_action",
+                        **error_response
+                    })
+                    continue
+                
+                # Get user's location preferences
+                location_prefs = current_user.location_preferences or {}
+                
+                # Check if power state needs updating
+                power_update = location_manager.update_power_state(current_user.id, location_prefs)
+                if power_update:
+                    await websocket.send_json({
+                        "type": "power_state_update",
+                        **power_update
+                    })
+                
+                lat = data.get('lat')
+                lon = data.get('lon')
+                region_id = data.get('region_id')
+                
+                if all(x is not None for x in (lat, lon, region_id)):
+                    # Update location and get triggers
+                    triggers = await service.check_proximity_triggers(lat, lon, current_user.id)
+                    
+                    # Update location tracking in both managers
+                    await manager.update_user_location(current_user.id, lat, lon, region_id)
+                    
+                    # Send triggers and status back to the user
+                    await websocket.send_json({
+                        "type": "location_update",
+                        "triggers": triggers,
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "power_state": location_manager.state.power_states.get(current_user.id)
+                    })
+                    
+                    last_update = current_time
+            
+            except Exception as e:
+                logger.error(f"Error processing location update: {e}")
                 await websocket.send_json({
-                    "type": "location_update",
-                    "triggers": triggers,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "type": "error",
+                    "message": str(e)
                 })
-                
-                last_update = current_time
-            
+    
     except WebSocketDisconnect:
         await manager.disconnect(websocket, current_user.id)
+        location_manager.unregister_connection(current_user.id)
+    
+    finally:
+        # Ensure cleanup happens even on unexpected errors
+        location_manager.unregister_connection(current_user.id)
 
 @router.post("/offline/package")
 async def download_offline_package(
@@ -683,12 +728,50 @@ async def get_region_analytics(
     )
 
 class GeolocationConfig(BaseModel):
-    minAccuracy: float = 20.0  # meters
-    maxAccuracy: float = 100.0  # meters
-    updateInterval: float = 5.0  # seconds
-    backgroundMode: bool = False
-    powerSaveMode: bool = False
-
+    # Core settings
+    minAccuracy: float = Field(20.0, description="Minimum accuracy in meters for location updates")
+    maxAccuracy: float = Field(100.0, description="Maximum acceptable accuracy in meters")
+    updateInterval: float = Field(5.0, description="Update interval in seconds")
+    
+    # Power management
+    backgroundMode: bool = Field(False, description="Enable background location tracking")
+    powerSaveMode: bool = Field(False, description="Reduce update frequency to save power")
+    
+    # Advanced settings
+    highAccuracyMode: bool = Field(True, description="Use GPS for higher accuracy")
+    minimumDistance: float = Field(10.0, description="Minimum distance (meters) between updates")
+    maximumAge: int = Field(30000, description="Maximum age of cached position in milliseconds")
+    timeout: int = Field(10000, description="Position request timeout in milliseconds")
+    
+    # Error handling
+    retryInterval: float = Field(3.0, description="Retry interval for failed requests in seconds")
+    maxRetries: int = Field(3, description="Maximum number of retry attempts")
+    fallbackToNetwork: bool = Field(True, description="Fall back to network location if GPS fails")
+    
+    # Permission settings
+    requireBackground: bool = Field(False, description="Require background location permission")
+    requirePrecise: bool = Field(True, description="Require precise location permission")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "minAccuracy": 20.0,
+                "maxAccuracy": 100.0,
+                "updateInterval": 5.0,
+                "backgroundMode": False,
+                "powerSaveMode": False,
+                "highAccuracyMode": True,
+                "minimumDistance": 10.0,
+                "maximumAge": 30000,
+                "timeout": 10000,
+                "retryInterval": 3.0,
+                "maxRetries": 3,
+                "fallbackToNetwork": True,
+                "requireBackground": False,
+                "requirePrecise": True
+            }
+        }
+    
 @router.get("/location/config")
 async def get_location_config(
     current_user: User = Depends(get_current_active_user)
