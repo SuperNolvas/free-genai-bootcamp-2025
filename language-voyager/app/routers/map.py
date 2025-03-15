@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 from typing import Dict, List, Optional
 from datetime import datetime
+from pydantic import BaseModel
 from ..database.config import get_db
-from ..services.arcgis import ArcGISService, get_arcgis_service
+from ..services.arcgis import ArcGISService
 from ..auth.utils import get_current_active_user
 from ..models.user import User
 from ..models.region import Region
