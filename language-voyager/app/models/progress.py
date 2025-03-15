@@ -8,6 +8,7 @@ class UserProgress(Base):
     __tablename__ = "user_progress"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
+    region_id = Column(String, ForeignKey("regions.id"))
     language = Column(String)  # e.g., "japanese", "korean"
     region = Column(String)    # e.g., "tokyo", "kansai"
     proficiency_level = Column(Float)  # Decimal score of proficiency
@@ -22,5 +23,6 @@ class UserProgress(Base):
     content_mastery = Column(JSON, default=dict, nullable=False)  # Track content mastery by type
     achievements = Column(JSON, default=list, nullable=False)  # Store earned achievements
     
-    # Relationship to user
+    # Relationships
     user = relationship("User", back_populates="progress")
+    region = relationship("Region", back_populates="user_progress")

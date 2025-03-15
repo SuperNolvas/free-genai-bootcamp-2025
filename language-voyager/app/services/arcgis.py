@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 import redis
 import hashlib
+import math
 from ..core.config import get_settings
 from ..models.arcgis_usage import ArcGISUsage
 
@@ -533,3 +534,88 @@ class ArcGISService:
             'returnMetadata': 'true'
         }
         return await self._make_request('regions/preload', params, 'feature_request')
+
+    async def generate_tile_package(
+        self,
+        bounds: Dict[str, float],
+        zoom_levels: List[int]
+    ) -> Dict:
+        """
+        Generate a tile package for offline use within specified bounds
+        Args:
+            bounds: Dict with minx, miny, maxx, maxy in WGS84
+            zoom_levels: List of zoom levels to include
+        Returns:
+            Dict containing tile package info and URLs
+        """
+        if not self.api_key:
+            raise ValueError("ArcGIS API key not configured")
+            
+        # Calculate tile coordinates for each zoom level
+        tile_info = {}
+        for zoom in zoom_levels:
+            tiles = self._calculate_tiles_for_bounds(bounds, zoom)
+            tile_info[str(zoom)] = tiles
+            
+        # Track credit usage - each tile costs 0.003 credits
+        total_tiles = sum(len(tiles['x']) * len(tiles['y']) for tiles in tile_info.values())
+        credits_used = total_tiles * 0.003
+        
+        # Record usage
+        usage = ArcGISUsage(
+            operation_type="tile_package",
+            credits_used=credits_used,
+            timestamp=datetime.utcnow()
+        )
+        self.db.add(usage)
+        self.db.commit()
+        
+        # Generate URLs for each tile
+        tile_urls = {}
+        for zoom, tiles in tile_info.items():
+            tile_urls[zoom] = []
+            for x in tiles['x']:
+                for y in tiles['y']:
+                    url = f"https://basemaps.arcgis.com/arcgis/rest/services/World_Basemap/tile/{zoom}/{y}/{x}?token={self.api_key}"
+                    tile_urls[zoom].append({
+                        'url': url,
+                        'x': x,
+                        'y': y,
+                        'z': zoom
+                    })
+                    
+        return {
+            'bounds': bounds,
+            'zoom_levels': zoom_levels,
+            'total_tiles': total_tiles,
+            'credits_used': credits_used,
+            'tiles': tile_urls,
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+    def _calculate_tiles_for_bounds(
+        self,
+        bounds: Dict[str, float],
+        zoom: int
+    ) -> Dict[str, List[int]]:
+        """Calculate tile coordinates that cover the given bounds at specified zoom level"""
+        def lat_to_y(lat: float, zoom: int) -> int:
+            lat_rad = math.radians(lat)
+            n = 2.0 ** zoom
+            y = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n)
+            return y
+            
+        def lon_to_x(lon: float, zoom: int) -> int:
+            n = 2.0 ** zoom
+            x = int((lon + 180.0) / 360.0 * n)
+            return x
+            
+        min_x = lon_to_x(bounds['minx'], zoom)
+        max_x = lon_to_x(bounds['maxx'], zoom)
+        min_y = lat_to_y(bounds['maxy'], zoom)  # Note: y is inverted
+        max_y = lat_to_y(bounds['miny'], zoom)
+        
+        return {
+            'x': list(range(min_x, max_x + 1)),
+            'y': list(range(min_y, max_y + 1))
+        }

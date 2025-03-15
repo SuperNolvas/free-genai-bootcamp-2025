@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     # OpenRouter settings
     OPENROUTER_API_KEY: Optional[str] = None
     OPENROUTER_DEFAULT_MODEL: Optional[str] = None  # e.g. "mistralai/mistral-7b" or "anthropic/claude-2"
+    
+    # Location Updates
+    LOCATION_UPDATE_MIN_INTERVAL: float = 1.0  # Minimum seconds between updates
+    LOCATION_UPDATE_BURST_LIMIT: int = 5  # Maximum burst updates allowed
+    LOCATION_UPDATE_BURST_PERIOD: int = 60  # Period (in seconds) for burst limit
+    LOCATION_CHANGE_MIN_DISTANCE: float = 1.0  # Minimum distance (meters) required between updates
 
     model_config = ConfigDict(
         env_file=".env",

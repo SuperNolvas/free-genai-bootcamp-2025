@@ -14,6 +14,9 @@ from app.models.arcgis_usage import ArcGISUsage
 from app.models.content import LanguageContent
 from app.models.progress import UserProgress
 from app.models.user import User
+from app.models.region import Region
+from app.models.poi import PointOfInterest
+from app.models.achievement import Achievement, AchievementDefinition
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

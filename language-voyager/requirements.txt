@@ -30,6 +30,7 @@ pillow>=9.5.0
 pyarrow>=11.0.0
 ujson>=3.0.0
 cachetools>=5.3.0
+geopy>=2.4.1
 
 # Testing
 pytest>=7.4.3
