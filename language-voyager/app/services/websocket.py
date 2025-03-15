@@ -3,30 +3,30 @@ from typing import Dict, List, Optional
 import json
 import asyncio
 from datetime import datetime
+from pydantic import BaseModel, validator
+from math import isfinite
+
+class LocationUpdate(BaseModel):
+    lat: float
+    lon: float
+    region_id: str
+    
+    @validator('lat')
+    def validate_latitude(cls, v):
+        if not isfinite(v) or v < -90 or v > 90:
+            raise ValueError('Invalid latitude')
+        return v
+        
+    @validator('lon')
+    def validate_longitude(cls, v):
+        if not isfinite(v) or v < -180 or v > 180:
+            raise ValueError('Invalid longitude')
+        return v
 
 class ConnectionManager:
     def __init__(self):
         # Store active connections by user_id
         self.active_connections: Dict[int, List[WebSocket]] = {}
-        # Store last known locations
-        self.user_locations: Dict[int, Dict] = {}
-        
-    async def connect(self, websocket: WebSocket, user_id: int):
-        await websocket.accept()
-        if user_id not in self.active_connections:
-            self.active_connections[user_id] = []
-        self.active_connections[user_id].append(websocket)
-    
-    async def disconnect(self, websocket: WebSocket, user_id: int):
-        self.active_connections[user_id].remove(websocket)
-        if not self.active_connections[user_id]:
-            del self.active_connections[user_id]
-    
-    async def send_personal_message(self, message: dict, user_id: int):
-        if user_id in self.active_connections:
-            dead_connections = []
-            for connection in self.active_connections[user_id]:
-                try:
                     await connection.send_json(message)
                 except RuntimeError:
                     dead_connections.append(connection)

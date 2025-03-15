@@ -236,3 +236,300 @@ class ArcGISService:
         })
         
         return triggers
+
+    async def analyze_spatial_relationships(self, geometry: Dict, region_id: str) -> Dict:
+        """Analyze spatial relationships between a geometry and region features"""
+        params = {
+            'f': 'json',
+            'geometry': json.dumps(geometry),
+            'region': region_id,
+            'relations': 'intersects,contains,within',
+            'returnZ': 'false',
+            'returnM': 'false'
+        }
+        return await self._make_request('geometry/relation', params, 'feature_request')
+
+    async def find_optimal_route(
+        self,
+        points: List[Dict[str, float]],
+        region_id: str,
+        optimize_for: str = 'time'
+    ) -> Dict:
+        """Find optimal route between multiple points within a region
+        
+        Args:
+            points: List of points in format [{"lat": float, "lon": float}, ...]
+            region_id: Region to constrain route within
+            optimize_for: 'time' or 'distance'
+        """
+        stops = ';'.join([f"{p['lon']},{p['lat']}" for p in points])
+        params = {
+            'f': 'json',
+            'stops': stops,
+            'region': region_id,
+            'optimize': optimize_for,
+            'restrictionAttributes': 'oneway,private',
+            'returnDirections': 'true',
+            'returnRoutes': 'true',
+            'returnStops': 'true',
+            'returnBarriers': 'false',
+            'returnPolygonBarriers': 'false',
+            'returnPolylineBarriers': 'false',
+            'directionsLanguage': 'en'
+        }
+        return await self._make_request('route/solve', params, 'routing')
+
+    async def get_region_boundary(self, region_id: str) -> Dict:
+        """Get detailed boundary geometry for a region"""
+        params = {
+            'f': 'json',
+            'region': region_id,
+            'returnGeometry': 'true',
+            'geometryPrecision': 6
+        }
+        return await self._make_request('regions/boundary', params, 'feature_request')
+
+    async def check_region_intersection(self, lat: float, lon: float, region_id: str) -> Dict:
+        """Check if a point intersects with region boundaries and get relevant metadata
+        
+        Returns details about the intersection including:
+        - Whether point is in region
+        - Distance to region boundary
+        - Nearest POIs
+        - Sub-region information (if applicable)
+        """
+        params = {
+            'f': 'json',
+            'location': f"{lon},{lat}",
+            'region': region_id,
+            'returnSubRegions': 'true',
+            'returnDistance': 'true',
+            'returnNearestPOI': 'true'
+        }
+        return await self._make_request('regions/contains', params, 'feature_request')
+
+    async def get_region_analytics(self, region_id: str) -> Dict:
+        """Get advanced spatial analytics for a region including density, clustering, and patterns"""
+        params = {
+            'f': 'json',
+            'region': region_id,
+            'analyses': 'density,clusters,patterns',
+            'returnStatistics': 'true'
+        }
+        return await self._make_request('regions/analyze', params, 'feature_request')
+
+    async def find_similar_regions(self, region_id: str, criteria: List[str]) -> Dict:
+        """Find regions with similar spatial characteristics
+        
+        Args:
+            region_id: Source region to compare against
+            criteria: List of criteria to match (e.g., ['density', 'poi_types', 'area'])
+        """
+        params = {
+            'f': 'json',
+            'sourceRegion': region_id,
+            'criteria': ','.join(criteria),
+            'maxResults': 5
+        }
+        return await self._make_request('regions/similar', params, 'feature_request')
+
+    async def analyze_region_connectivity(self, region_id: str) -> Dict:
+        """Analyze region connectivity including transport links and accessibility"""
+        params = {
+            'f': 'json',
+            'region': region_id,
+            'analyzeTransport': 'true',
+            'analyzeAccessibility': 'true'
+        }
+        return await self._make_request('regions/connectivity', params, 'feature_request')
+
+    async def get_region_clustering(self, region_id: str, feature_type: str) -> Dict:
+        """Get spatial clusters of specific features within a region
+        
+        Args:
+            region_id: Region to analyze
+            feature_type: Type of feature to cluster (e.g., 'poi', 'language_usage')
+        """
+        params = {
+            'f': 'json',
+            'region': region_id,
+            'featureType': feature_type,
+            'method': 'DBSCAN',
+            'returnDensity': 'true'
+        }
+        return await self._make_request('regions/clusters', params, 'feature_request')
+
+    async def find_route_in_region(
+        self, 
+        points: List[Dict[str, float]], 
+        region_id: str,
+        prefer_walking: bool = True,
+        avoid_tolls: bool = True
+    ) -> Dict:
+        """Find an optimized route within a region that stays within region boundaries
+
+        Args:
+            points: List of waypoints in format [{"lat": float, "lon": float}, ...]
+            region_id: Region to constrain route within
+            prefer_walking: Whether to optimize for walking paths
+            avoid_tolls: Whether to avoid toll roads
+        """
+        stops = ';'.join([f"{p['lon']},{p['lat']}" for p in points])
+        params = {
+            'f': 'json',
+            'stops': stops,
+            'region': region_id,
+            'travelMode': 'walking' if prefer_walking else 'driving',
+            'directionsLanguage': 'en',
+            'returnRoutes': 'true',
+            'returnDirections': 'true',
+            'returnGeometry': 'true',
+            'restrictionAttributes': 'none' if not avoid_tolls else 'tollways',
+            'useTraffic': 'false',
+            'preserveLastStop': 'true',
+            'returnStops': 'true',
+            'boundingRegion': region_id  # Ensures route stays in region
+        }
+        return await self._make_request('route/solve', params, 'routing')
+
+    async def analyze_region_topology(self, region_id: str) -> Dict:
+        """Analyze region topology including elevation, slope, and terrain features"""
+        params = {
+            'f': 'json',
+            'region': region_id,
+            'returnElevation': 'true',
+            'returnSlope': 'true',
+            'returnAspect': 'true',
+            'returnTerrainFeatures': 'true'
+        }
+        return await self._make_request('regions/topology', params, 'feature_request')
+
+    async def get_region_poi_density(self, region_id: str, poi_type: Optional[str] = None) -> Dict:
+        """Get POI density analysis for a region with optional type filtering"""
+        params = {
+            'f': 'json',
+            'region': region_id,
+            'analysisType': 'density',
+            'poiType': poi_type,
+            'returnHeatmap': 'true',
+            'cellSize': 100  # meters
+        }
+        return await self._make_request('regions/analyze', params, 'feature_request')
+
+    async def find_region_hotspots(
+        self,
+        region_id: str,
+        feature_type: str = 'language_usage',
+        min_points: int = 10,
+        max_radius: float = 1000
+    ) -> Dict:
+        """Find activity hotspots within a region using DBSCAN clustering
+
+        Args:
+            region_id: Region to analyze
+            feature_type: Type of feature to cluster (e.g., 'language_usage', 'user_activity')
+            min_points: Minimum points to form a cluster
+            max_radius: Maximum radius (meters) to search for cluster points
+        """
+        params = {
+            'f': 'json',
+            'region': region_id,
+            'featureType': feature_type,
+            'analysisType': 'clustering',
+            'method': 'DBSCAN',
+            'minPoints': min_points,
+            'searchRadius': max_radius,
+            'returnDensity': 'true',
+            'returnClusters': 'true'
+        }
+        return await self._make_request('regions/analyze', params, 'feature_request')
+
+    async def get_regions_at_location(
+        self,
+        lat: float,
+        lon: float,
+        include_metadata: bool = True,
+        max_results: int = 5
+    ) -> Dict:
+        """Get all regions that contain a given point, ordered by area (smallest first)
+        
+        This helps identify the most specific region when a point intersects multiple regions.
+        For example, a point might be in both "Tokyo" and "Asakusa" regions.
+        """
+        params = {
+            'f': 'json',
+            'location': f"{lon},{lat}",
+            'returnRegions': 'true',
+            'returnMetadata': str(include_metadata).lower(),
+            'maxResults': max_results,
+            'orderBy': 'area',
+            'orderDirection': 'asc'
+        }
+        return await self._make_request('regions/atLocation', params, 'feature_request')
+
+    async def get_region_transitions(
+        self,
+        lat: float,
+        lon: float,
+        previous_lat: Optional[float] = None,
+        previous_lon: Optional[float] = None
+    ) -> Dict:
+        """Check if user has transitioned between regions and get transition metadata
+        
+        Returns:
+        - Regions exited since last position
+        - Regions entered since last position
+        - Current regions (ordered by specificity)
+        - Transition events (e.g., "entered_new_region", "exited_region")
+        """
+        if previous_lat is None or previous_lon is None:
+            # First position update, just get current regions
+            return await self.get_regions_at_location(lat, lon)
+
+        params = {
+            'f': 'json',
+            'currentLocation': f"{lon},{lat}",
+            'previousLocation': f"{previous_lon},{previous_lat}",
+            'returnTransitions': 'true',
+            'returnMetadata': 'true'
+        }
+        return await self._make_request('regions/checkTransitions', params, 'feature_request')
+
+    async def get_nearby_regions(
+        self,
+        lat: float,
+        lon: float,
+        radius_meters: float = 5000,
+        min_difficulty: Optional[float] = None,
+        max_difficulty: Optional[float] = None
+    ) -> Dict:
+        """Get regions within specified radius that match difficulty criteria"""
+        params = {
+            'f': 'json',
+            'location': f"{lon},{lat}",
+            'radius': radius_meters,
+            'returnMetadata': 'true',
+            'orderBy': 'distance'
+        }
+        if min_difficulty is not None:
+            params['minDifficulty'] = min_difficulty
+        if max_difficulty is not None:
+            params['maxDifficulty'] = max_difficulty
+        
+        return await self._make_request('regions/nearby', params, 'feature_request')
+
+    async def preload_region_data(
+        self,
+        region_id: str,
+        include_pois: bool = True,
+        include_challenges: bool = True
+    ) -> Dict:
+        """Preload region data for caching, including POIs and challenges if specified"""
+        params = {
+            'f': 'json',
+            'region': region_id,
+            'includePOIs': str(include_pois).lower(),
+            'includeChallenges': str(include_challenges).lower(),
+            'returnMetadata': 'true'
+        }
+        return await self._make_request('regions/preload', params, 'feature_request')

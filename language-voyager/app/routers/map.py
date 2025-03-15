@@ -526,3 +526,157 @@ async def sync_offline_changes(
         region_id=region_id,
         offline_data=offline_data
     )
+
+class RegionGeometry(BaseModel):
+    type: str
+    coordinates: List[List[float]]
+
+@router.post("/regions/spatial-analysis")
+async def analyze_region_spatial_relationships(
+    geometry: RegionGeometry,
+    region_id: str,
+    service: ArcGISService = Depends(get_arcgis_service),
+    current_user: User = Depends(get_current_active_user)
+) -> Dict:
+    """Analyze spatial relationships between provided geometry and region features"""
+    return await service.analyze_spatial_relationships(geometry.dict(), region_id)
+
+@router.post("/regions/route")
+async def find_region_route(
+    points: List[Dict[str, float]],
+    region_id: str,
+    optimize_for: str = Query('time', regex='^(time|distance)$'),
+    service: ArcGISService = Depends(get_arcgis_service),
+    current_user: User = Depends(get_current_active_user)
+) -> Dict:
+    """Find optimal route between multiple points within a region"""
+    return await service.find_optimal_route(points, region_id, optimize_for)
+
+@router.get("/regions/{region_id}/boundary")
+async def get_region_boundary_geometry(
+    region_id: str,
+    service: ArcGISService = Depends(get_arcgis_service),
+    current_user: User = Depends(get_current_active_user)
+) -> Dict:
+    """Get detailed boundary geometry for a region"""
+    return await service.get_region_boundary(region_id)
+
+@router.get("/regions/{region_id}/check-intersection")
+async def check_region_point_intersection(
+    lat: float,
+    lon: float,
+    region_id: str,
+    service: ArcGISService = Depends(get_arcgis_service),
+    current_user: User = Depends(get_current_active_user)
+) -> Dict:
+    """Check if a point intersects with region boundaries and get metadata"""
+    return await service.check_region_intersection(lat, lon, region_id)
+
+@router.get("/regions/{region_id}/analytics")
+async def get_region_analytics(
+    region_id: str,
+    service: ArcGISService = Depends(get_arcgis_service),
+    current_user: User = Depends(get_current_active_user)
+) -> Dict:
+    """Get advanced spatial analytics for a region"""
+    return await service.get_region_analytics(region_id)
+
+@router.get("/regions/{region_id}/similar")
+async def find_similar_regions(
+    region_id: str,
+    criteria: List[str] = Query(["density", "poi_types"], description="Criteria to match"),
+    service: ArcGISService = Depends(get_arcgis_service),
+    current_user: User = Depends(get_current_active_user)
+) -> Dict:
+    """Find regions with similar characteristics"""
+    return await service.find_similar_regions(region_id, criteria)
+
+@router.get("/regions/{region_id}/connectivity")
+async def analyze_region_connectivity(
+    region_id: str,
+    service: ArcGISService = Depends(get_arcgis_service),
+    current_user: User = Depends(get_current_active_user)
+) -> Dict:
+    """Analyze region connectivity and accessibility"""
+    return await service.analyze_region_connectivity(region_id)
+
+@router.get("/regions/{region_id}/clusters")
+async def get_region_clustering(
+    region_id: str,
+    feature_type: str = Query(..., description="Type of feature to cluster"),
+    service: ArcGISService = Depends(get_arcgis_service),
+    current_user: User = Depends(get_current_active_user)
+) -> Dict:
+    """Get spatial clusters of specific features within a region"""
+    return await service.get_region_clustering(region_id, feature_type)
+
+@router.post("/regions/transitions", response_model=ResponseModel)
+async def check_region_transitions(
+    location: Dict[str, float],
+    previous_location: Optional[Dict[str, float]] = None,
+    current_user: User = Depends(get_current_active_user),
+    arcgis_service: ArcGISService = Depends(get_arcgis_service),
+    db: Session = Depends(get_db)
+) -> ResponseModel:
+    """Check for region transitions and manage dynamic region loading"""
+    transitions = await arcgis_service.get_region_transitions(
+        lat=location["lat"],
+        lon=location["lon"],
+        previous_lat=previous_location["lat"] if previous_location else None,
+        previous_lon=previous_location["lon"] if previous_location else None
+    )
+    
+    # Handle any region transitions
+    for region in transitions.get("entered_regions", []):
+        # Preload region data in background
+        asyncio.create_task(arcgis_service.preload_region_data(
+            region_id=region["id"],
+            include_pois=True,
+            include_challenges=True
+        ))
+    
+    return ResponseModel(
+        success=True,
+        message="Region transitions processed successfully",
+        data=transitions
+    )
+
+@router.get("/regions/nearby", response_model=ResponseModel)
+async def get_nearby_regions(
+    lat: float,
+    lon: float,
+    radius: float = 5000,
+    min_difficulty: Optional[float] = None,
+    max_difficulty: Optional[float] = None,
+    current_user: User = Depends(get_current_active_user),
+    arcgis_service: ArcGISService = Depends(get_arcgis_service)
+) -> ResponseModel:
+    """Get nearby regions that match specified criteria"""
+    nearby = await arcgis_service.get_nearby_regions(
+        lat=lat,
+        lon=lon,
+        radius_meters=radius,
+        min_difficulty=min_difficulty,
+        max_difficulty=max_difficulty
+    )
+    
+    return ResponseModel(
+        success=True,
+        message="Nearby regions retrieved successfully",
+        data=nearby
+    )
+
+@router.get("/regions/{region_id}/analytics", response_model=ResponseModel)
+async def get_region_analytics(
+    region_id: str,
+    current_user: User = Depends(get_current_active_user),
+    arcgis_service: ArcGISService = Depends(get_arcgis_service)
+) -> ResponseModel:
+    """Get detailed analytics for a region including POI density and activity hotspots"""
+    analytics = await arcgis_service.get_region_analytics(region_id)
+    
+    return ResponseModel(
+        success=True,
+        message="Region analytics retrieved successfully",
+        data=analytics
+    )
