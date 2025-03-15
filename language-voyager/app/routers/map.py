@@ -1,20 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 from typing import Dict, List, Optional
 from datetime import datetime
 from ..database.config import get_db
-from ..services.arcgis import ArcGISService
+from ..services.arcgis import ArcGISService, get_arcgis_service
 from ..auth.utils import get_current_active_user
 from ..models.user import User
 from ..models.region import Region
 from ..models.poi import PointOfInterest
 from ..models.progress import UserProgress
 from ..models.content import LanguageContent, ContentType
-from .schemas.map import Region as RegionSchema, POIResponse, POICreate, POIUpdate, ContentDeliveryResponse
+from .schemas.map import Region as RegionSchema, POIResponse, POICreate, POIUpdate, POIUpdate, ContentDeliveryResponse
 from ..core.schemas import ResponseModel
 from ..services.cache import cache
 from ..services.recommendation import ContentRecommender
+from ..services.websocket import manager
+from ..services.offline_maps import OfflineMapService
+import asyncio
 
 router = APIRouter(
     prefix="/map",
@@ -22,11 +25,17 @@ router = APIRouter(
     dependencies=[Depends(get_current_active_user)]
 )
 
+# Rate limiting configuration
+LOCATION_UPDATE_MIN_INTERVAL = 1.0  # seconds
+
 async def get_arcgis_service(db: Session = Depends(get_db)) -> ArcGISService:
     try:
         return ArcGISService(db)
     except ValueError as e:
         raise HTTPException(status_code=503, detail=str(e))
+
+def get_offline_map_service(db: Session = Depends(get_db)) -> OfflineMapService:
+    return OfflineMapService(db)
 
 @router.get("/regions", response_model=ResponseModel[List[RegionSchema]])
 async def list_available_regions(
@@ -140,14 +149,20 @@ async def get_route(
 async def update_location(
     lat: float,
     lon: float,
+    region_id: str,
     current_user: User = Depends(get_current_active_user),
     service: ArcGISService = Depends(get_arcgis_service)
 ) -> Dict:
-    """Update user location and get proximity-based triggers"""
+    """Update user location and get proximity-based triggers (HTTP fallback)"""
     triggers = await service.check_proximity_triggers(lat, lon, current_user.id)
+    
+    # Update WebSocket manager's location tracking even for HTTP requests
+    await manager.update_user_location(current_user.id, lat, lon, region_id)
+    
     return {
         "triggers": triggers,
-        "location_updated": True
+        "location_updated": True,
+        "timestamp": datetime.utcnow().isoformat()
     }
 
 @router.get("/geofence/check")
@@ -429,3 +444,85 @@ def _determine_formality_level(poi_type: str) -> str:
     elif poi_type in casual_types:
         return "casual"
     return "neutral"
+
+@router.websocket("/ws/location")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    current_user: User = Depends(get_current_active_user),
+    service: ArcGISService = Depends(get_arcgis_service)
+):
+    await manager.connect(websocket, current_user.id)
+    last_update = datetime.utcnow().timestamp()
+    
+    try:
+        while True:
+            data = await websocket.receive_json()
+            
+            # Rate limiting check
+            current_time = datetime.utcnow().timestamp()
+            if current_time - last_update < LOCATION_UPDATE_MIN_INTERVAL:
+                continue
+            
+            lat = data.get('lat')
+            lon = data.get('lon')
+            region_id = data.get('region_id')
+            
+            if all(x is not None for x in (lat, lon, region_id)):
+                # Update location and get triggers
+                triggers = await service.check_proximity_triggers(lat, lon, current_user.id)
+                
+                # Update WebSocket manager's location tracking
+                await manager.update_user_location(current_user.id, lat, lon, region_id)
+                
+                # Send triggers back to the user
+                await websocket.send_json({
+                    "type": "location_update",
+                    "triggers": triggers,
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                
+                last_update = current_time
+            
+    except WebSocketDisconnect:
+        await manager.disconnect(websocket, current_user.id)
+
+@router.post("/offline/package")
+async def download_offline_package(
+    region_id: str,
+    bounds: Dict,
+    zoom_levels: List[int] = [12, 13, 14, 15, 16],
+    current_user: User = Depends(get_current_active_user),
+    offline_service: OfflineMapService = Depends(get_offline_map_service)
+) -> Dict:
+    """Download an offline package for a region"""
+    return await offline_service.prepare_offline_package(
+        region_id=region_id,
+        bounds=bounds,
+        zoom_levels=zoom_levels
+    )
+
+@router.get("/offline/status/{region_id}")
+async def check_offline_package_status(
+    region_id: str,
+    timestamp: Optional[str] = None,
+    current_user: User = Depends(get_current_active_user),
+    offline_service: OfflineMapService = Depends(get_offline_map_service)
+) -> Dict:
+    """Check if an offline package needs updating"""
+    return await offline_service.check_package_status(
+        region_id=region_id,
+        timestamp=timestamp
+    )
+
+@router.post("/offline/sync/{region_id}")
+async def sync_offline_changes(
+    region_id: str,
+    offline_data: Dict,
+    current_user: User = Depends(get_current_active_user),
+    offline_service: OfflineMapService = Depends(get_offline_map_service)
+) -> Dict:
+    """Sync changes made while offline"""
+    return await offline_service.sync_offline_changes(
+        region_id=region_id,
+        offline_data=offline_data
+    )
