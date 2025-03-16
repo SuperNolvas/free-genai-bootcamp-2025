@@ -1,6 +1,7 @@
 from fastapi import WebSocket
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 from redis.asyncio import Redis
+from starlette.websockets import WebSocketState
 import json
 import logging
 import asyncio
@@ -23,16 +24,18 @@ class ConnectionManager:
         self.active_connections: Dict[int, WebSocket] = {}
         self.redis: Optional[Redis] = None
         self.redis_url = settings.REDIS_URL
-        if not self.redis_url:
-            raise ValueError("REDIS_URL is not configured in settings")
         
     async def connect(self, websocket: WebSocket, user_id: int) -> None:
         """Accept connection and store it"""
+        if user_id in self.active_connections:
+            # Clean up existing connection first
+            await self.disconnect(user_id)
+            
         await websocket.accept()
         self.active_connections[user_id] = websocket
         
         # Initialize Redis connection if needed
-        if not self.redis:
+        if self.redis_url and not self.redis:
             try:
                 self.redis = Redis.from_url(
                     self.redis_url,
@@ -43,16 +46,30 @@ class ConnectionManager:
                 await self.redis.ping()
             except Exception as e:
                 logger.error(f"Redis connection error: {e}")
-                raise RuntimeError("Failed to connect to Redis") from e
+                self.redis = None
     
     async def disconnect(self, user_id: int) -> None:
         """Remove connection"""
         if user_id in self.active_connections:
             try:
-                await self.active_connections[user_id].close()
-            except:
-                pass
-            del self.active_connections[user_id]
+                websocket = self.active_connections[user_id]
+                if websocket.client_state != WebSocketState.DISCONNECTED:
+                    await websocket.close()
+            except Exception as e:
+                logger.error(f"Error closing websocket: {e}")
+            finally:
+                del self.active_connections[user_id]
+    
+    async def send_to_user(self, user_id: int, data: Dict[str, Any]) -> None:
+        """Send data to a specific user"""
+        if user_id in self.active_connections:
+            websocket = self.active_connections[user_id]
+            if websocket.client_state != WebSocketState.DISCONNECTED:
+                try:
+                    await websocket.send_json(data)
+                except Exception as e:
+                    logger.error(f"Error sending message to user {user_id}: {e}")
+                    await self.disconnect(user_id)
     
     async def update_user_location(self, user_id: int, lat: float, lon: float, region_id: Optional[str] = None) -> None:
         """Update user's location in Redis"""
@@ -60,18 +77,38 @@ class ConnectionManager:
             return
             
         try:
+            # Validate inputs
+            if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+                raise ValueError("Latitude and longitude must be numbers")
+                
             location_data = {
-                "lat": lat,
-                "lon": lon,
-                "region_id": region_id,
-                "timestamp": datetime.utcnow().timestamp()
+                "lat": str(float(lat)),
+                "lon": str(float(lon)),
+                "timestamp": str(datetime.utcnow().timestamp())
             }
-            await self.redis.hset(
-                f"user:{user_id}:location",
-                mapping=location_data
-            )
-            # Set expiry to prevent stale data
-            await self.redis.expire(f"user:{user_id}:location", 3600)  # 1 hour
+            
+            if region_id is not None:
+                location_data["region_id"] = str(region_id)
+                
+            # Update location in Redis
+            key = f"user:{user_id}:location"
+            await self.redis.hset(key, mapping=location_data)
+            await self.redis.expire(key, 3600)  # 1 hour TTL
+            
+            # Send confirmation to user
+            await self.send_to_user(user_id, {
+                "type": "location_update",
+                "status": "ok",
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            
+        except (TypeError, ValueError) as e:
+            logger.error(f"Invalid location data: {e}")
+            if user_id in self.active_connections:
+                await self.send_to_user(user_id, {
+                    "type": "error",
+                    "message": str(e)
+                })
         except Exception as e:
             logger.error(f"Error updating location in Redis: {e}")
     
@@ -82,7 +119,7 @@ class ConnectionManager:
             
         try:
             location_data = await self.redis.hgetall(f"user:{user_id}:location")
-            if location_data:
+            if location_data and "lat" in location_data and "lon" in location_data:
                 return LocationUpdate(
                     lat=float(location_data["lat"]),
                     lon=float(location_data["lon"]),
@@ -101,8 +138,12 @@ class ConnectionManager:
         
         # Close Redis connection if it exists
         if self.redis:
-            await self.redis.close()
-            self.redis = None
+            try:
+                await self.redis.close()
+            except Exception as e:
+                logger.error(f"Error closing Redis connection: {e}")
+            finally:
+                self.redis = None
 
 # Create a singleton instance
 manager = ConnectionManager()

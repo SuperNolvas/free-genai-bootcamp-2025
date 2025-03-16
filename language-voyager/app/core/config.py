@@ -14,10 +14,9 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     
     # Authentication - making these non-optional with secure defaults
-    JWT_SECRET_KEY: str = Field(default="development-secret-key-change-in-production-00112233445566778899")
-    SECRET_KEY: str = Field(default="development-secret-key-change-in-production-00112233445566778899")
+    SECRET_KEY: str = "development-secret-key-change-in-production-00112233445566778899"
+    JWT_SECRET_KEY: Optional[str] = None  # Will be initialized in __init__
     JWT_ALGORITHM: str = "HS256"
-    ALGORITHM: str = "HS256"  # Keeping both for backwards compatibility
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 240
     
     # Database
@@ -27,7 +26,7 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
-    REDIS_URL: str = "redis://redis:6379/0"
+    REDIS_URL: Optional[str] = None
     
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
@@ -64,10 +63,10 @@ class Settings(BaseSettings):
 
     def __init__(self, **data):
         super().__init__(**data)
-        # Ensure SECRET_KEY and JWT_SECRET_KEY are always the same
-        self.JWT_SECRET_KEY = self.SECRET_KEY = self.JWT_SECRET_KEY or self.SECRET_KEY
-        # Ensure algorithms are consistent
-        self.ALGORITHM = self.JWT_ALGORITHM
+        # Always use SECRET_KEY for JWT if JWT_SECRET_KEY is not explicitly set
+        if self.JWT_SECRET_KEY is None:
+            self.JWT_SECRET_KEY = self.SECRET_KEY
+        
         # Set Redis URL if individual components are provided
         if not self.REDIS_URL and self.REDIS_HOST:
             self.REDIS_URL = f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
