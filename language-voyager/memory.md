@@ -1691,6 +1691,38 @@ They're separate because:
 
 This separation allows the application to handle both traditional web API requests and real-time location tracking efficiently, each with authentication methods optimized for their specific use case.
 
+Let me clarify the WebSocket implementation's role in the project:
+
+The WebSocket implementation we just completed is actually independent of ArcGIS - it serves as the real-time communication layer between our application and the client's browser/device. Here's how it fits in:
+
+5. The WebSocket handles the client's device geolocation updates (from the browser's navigator.geolocation API or mobile device GPS)
+6. When we receive location updates through WebSocket, our backend:
+   - Updates the user's location in Redis for real-time tracking
+   - Checks if they've entered new regions
+   - Triggers nearby POI detection
+   - Updates their progress
+   - Calculates achievements
+
+ArcGIS comes into play in a different way - we use it for:
+- Geocoding addresses to coordinates
+- Reverse geocoding coordinates to places
+- Getting place details and POI information
+- Map tile rendering
+- Spatial queries and calculations
+
+The interaction with ArcGIS happens through regular HTTP API calls, not WebSocket. We don't need real-time WebSocket connection with ArcGIS because:
+1. Map tiles are loaded on-demand via HTTP
+2. Place/POI data is relatively static and cached
+3. Spatial calculations are done server-side using our cached ArcGIS data
+
+So in essence:
+- WebSocket: Real-time client device location ↔ Our backend
+- HTTP/REST: Our backend ↔ ArcGIS services
+
+This separation allows us to minimize ArcGIS API calls (saving credits) while still maintaining real-time location tracking functionality.
+
+
+
 ## Websocket testing
 
 ```sh
@@ -1811,3 +1843,34 @@ Connected (press CTRL+C to quit)
    - Enhance privacy controls
 
 *Note: WebSocket geolocation system implementation milestone completed. Basic functionality verified and working as expected. Ready to proceed with enhanced features.*
+
+## Connection Architecture
+```mermaid
+graph LR
+    Client[Client Browser/Device]
+    Backend[Language Voyager Backend]
+    Redis[(Redis)]
+    ArcGIS[ArcGIS Services]
+    
+    subgraph Real-time Location
+    Client <-->|WebSocket + JWT\nLocation Updates\nReal-time Events| Backend
+    Backend -->|Store Location| Redis
+    end
+    
+    subgraph Static Data
+    Client <-->|HTTP + OAuth\nAPI Requests| Backend
+    Backend <-->|HTTP REST API\nCached Responses| ArcGIS
+    end
+    
+    style Real-time Location fill:#f9f,stroke:#333,stroke-width:2px
+    style Static Data fill:#bbf,stroke:#333,stroke-width:2px
+```
+
+This diagram illustrates:
+- Real-time location tracking using WebSocket with JWT auth (pink)
+- Static data operations using HTTP with OAuth (blue)
+- Separation between real-time client updates and cached ArcGIS interactions
+- Redis for storing current user locations
+- No direct WebSocket connection needed with ArcGIS
+
+## Websocket testing
