@@ -23,6 +23,8 @@ class GeolocationService:
         self.last_position: Optional[Dict] = None
         self.error_count = 0
         self.update_task = None
+        self.last_update_time = 0
+        self.min_update_interval = 5.0  # Minimum time between updates in seconds
 
     async def send_json(self, data: Dict) -> None:
         """Safely send JSON data over WebSocket"""
@@ -46,6 +48,11 @@ class GeolocationService:
         self.active = True
         self.error_count = 0
         
+        # Update configuration
+        self.min_update_interval = float(config.get("updateInterval", 5.0))
+        if self.min_update_interval < 1.0:
+            self.min_update_interval = 1.0  # Enforce minimum interval
+        
         try:
             # Initialize tracking with config
             await self.send_json({
@@ -55,7 +62,7 @@ class GeolocationService:
                     "timeout": config.get("timeout", 10000),
                     "maximumAge": config.get("maximumAge", 30000),
                     "minAccuracy": config.get("minAccuracy", 20.0),
-                    "updateInterval": config.get("updateInterval", 5.0),
+                    "updateInterval": self.min_update_interval,
                     "minimumDistance": config.get("minimumDistance", 10.0)
                 }
             })
@@ -84,26 +91,47 @@ class GeolocationService:
         if not self.active or self.websocket.client_state != WebSocketState.CONNECTED:
             return
             
+        current_time = datetime.utcnow().timestamp()
+        if current_time - self.last_update_time < self.min_update_interval:
+            return  # Skip update if too soon
+            
         try:
             # Reset error count on successful update
             self.error_count = 0
             self.last_position = data
             
-            # Extract coordinates
-            coords = data.get("coords", {})
-            lat = coords.get("latitude")
-            lon = coords.get("longitude")
+            # Extract coordinates - handle nested structure correctly
+            position = data.get("coords", {})  # The position data might be direct or in coords
+            if not position and isinstance(data, dict):
+                position = data.get("position", {}).get("coords", {})  # Try nested structure
+            
+            lat = position.get("latitude")
+            lon = position.get("longitude")
+            accuracy = position.get("accuracy")
             
             if lat is None or lon is None:
                 raise ValueError("Missing latitude or longitude in position update")
             
+            try:
+                lat_float = float(lat)
+                lon_float = float(lon)
+                accuracy_float = float(accuracy) if accuracy is not None else None
+            except (TypeError, ValueError):
+                raise ValueError("Latitude and longitude must be numbers")
+            
             # Update location in the location manager
             await manager.update_user_location(
                 self.user_id,
-                float(lat),
-                float(lon),
-                data.get("region_id")
+                lat_float,
+                lon_float,
+                data.get("region_id"),
+                accuracy_float
             )
+            
+            # Update last update time
+            self.last_update_time = current_time
+            
+            # Don't send our own success response since manager.update_user_location already does
             
         except Exception as e:
             logger.error(f"Error processing location update: {e}")
@@ -144,18 +172,23 @@ class GeolocationService:
         try:
             while self.active and self.websocket.client_state == WebSocketState.CONNECTED:
                 try:
-                    # Request position update from client
-                    await self.send_json({
-                        "type": "get_position"
-                    })
+                    current_time = datetime.utcnow().timestamp()
+                    
+                    # Only request position if enough time has passed
+                    if current_time - self.last_update_time >= self.min_update_interval:
+                        # Request position update from client
+                        await self.send_json({
+                            "type": "get_position"
+                        })
                     
                     # Wait for configured interval
-                    await asyncio.sleep(config.get("updateInterval", 5.0))
+                    await asyncio.sleep(self.min_update_interval)
                     
                 except Exception as e:
                     logger.error(f"Error in update loop: {e}")
                     await self.handle_error("UPDATE_LOOP_ERROR", str(e))
-                    break
+                    # Add exponential backoff on errors
+                    await asyncio.sleep(min(30, self.min_update_interval * (2 ** self.error_count)))
                 
         except asyncio.CancelledError:
             raise

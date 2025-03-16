@@ -62,16 +62,12 @@ async def authenticate_websocket_user(websocket: WebSocket, db: Session) -> User
             )
         return user
 
-    except HTTPException as e:
-        logger.warning(f"WebSocket connection error: {e.detail}")
-        if websocket.client_state != WebSocketState.DISCONNECTED:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+    except HTTPException:
+        # Let the calling code handle HTTP exceptions
         raise
     except Exception as e:
-        logger.error(f"Unexpected WebSocket error: {str(e)}")
-        if websocket.client_state != WebSocketState.DISCONNECTED:
-            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        logger.error(f"Unexpected WebSocket authentication error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
+            detail="Internal server error during authentication"
         )

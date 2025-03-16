@@ -1702,3 +1702,21 @@ Connected (press CTRL+C to quit)
 < {"type":"location_update","status":"ok","timestamp":"2025-03-16T02:01:22.963946"}
 > 
 ```
+
+## Websocket Geolocation testing
+
+```sh
+docker compose exec web wscat -c "ws://web:8000/api/v1/map/ws/location" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0MkBleGFtcGxlLmNvbSIsImV4cCI6MTc0MjI0ODQ3OX0.K_3uiHngiXMNI9xk0IXS43t_SK-G0DaX-wu2KTc5PWw"
+Connected (press CTRL+C to quit)
+< {"type":"geolocation_init","config":{"enableHighAccuracy":true,"timeout":10000,"maximumAge":30000,"minAccuracy":20.0,"updateInterval":5.0,"minimumDistance":10.0}}
+< {"type":"get_position"}
+< {"type":"get_position"}
+> {"type": "config_update", "data": {"config": {"highAccuracyMode": true, "timeout": 10000, "maximumAge": 30000, "minAccuracy": 20.0, "updat
+> {"type": "config_update", "data": {"config": {"highAccuracyMode": true, "timeout": 10000, "maximumAge": 30000, "minAccuracy": 20.0, "updateInterval": 5.0, "minimumDistance": 10.0, "backgroundMode": false, "powerSaveMode": false}}}
+< {"type":"geolocation_init","config":{"enableHighAccuracy":true,"timeout":10000,"maximumAge":30000,"minAccuracy":20.0,"updateInterval":5.0,"minimumDistance":10.0}}
+< {"type":"get_position"}
+> {"type": "position_update", "position": {"coords": {"latitude": 35.6812, "longitude": 139.7671, "accuracy": 10.0}, "timestamp": 1683885600000}}
+< {"type":"location_update","status":"ok","coords":{"latitude":35.6812,"longitude":139.7671,"accuracy":10.0},"timestamp":"2025-03-16T22:19:47.889795"}
+< {"type":"get_position"}
+> %                                                          
+```

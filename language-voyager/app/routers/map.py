@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
 import logging
+from starlette.websockets import WebSocketState  # Add this import
 from ..database.config import get_db, SessionLocal
 from ..services.arcgis import ArcGISService
 from ..auth.utils import get_current_active_user
@@ -470,92 +471,109 @@ async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time location updates"""
     user = None
     db = None
+    geolocation = None
+    
     try:
         # Get database session
         db = SessionLocal()
         
-        # Authenticate using websocket-specific auth function
-        user = await authenticate_websocket_user(websocket, db)
+        # Authenticate before accepting connection
+        try:
+            user = await authenticate_websocket_user(websocket, db)
+            if not user:
+                await websocket.close(code=1008)  # Policy violation
+                return
+        except HTTPException as auth_error:
+            # Send error before closing
+            await websocket.close(code=1008)
+            return
+            
+        # Accept connection after successful authentication
+        await websocket.accept()
         
-        # Register connection with both managers
+        # Register connection with managers
         await manager.connect(websocket, user.id)
         location_manager.register_connection(user.id, websocket)
-        last_update = datetime.utcnow().timestamp()
+        
+        # Initialize geolocation service
+        from ..services.geolocation import GeolocationService
+        geolocation = GeolocationService(websocket, user.id)
+        
+        # Start tracking with default configuration
+        await geolocation.start_tracking({
+            "highAccuracyMode": True,
+            "timeout": 10000,
+            "maximumAge": 30000,
+            "minAccuracy": 20.0,
+            "updateInterval": 5.0,
+            "minimumDistance": 10.0,
+            "backgroundMode": False,
+            "powerSaveMode": False
+        })
         
         while True:
             try:
+                if websocket.client_state != WebSocketState.CONNECTED:
+                    break
+                    
                 data = await websocket.receive_json()
                 
-                # Rate limiting check
-                current_time = datetime.utcnow().timestamp()
-                if current_time - last_update < LOCATION_UPDATE_MIN_INTERVAL:
-                    continue
-                
-                if "error" in data:
-                    # Handle location errors
-                    error_response = await location_manager.handle_location_error(
-                        user.id,
-                        data["error"].get("code", "UNKNOWN"),
-                        data["error"].get("message", "Unknown error")
-                    )
-                    await websocket.send_json({
-                        "type": "error_action",
-                        **error_response
-                    })
-                    continue
-                
-                try:
-                    # Validate location data
-                    location_update = LocationUpdate(
-                        lat=data.get('lat'),
-                        lon=data.get('lon'),
-                        region_id=data.get('region_id'),
-                        timestamp=current_time
-                    )
+                if "type" in data:
+                    if data["type"] == "position_update":
+                        await geolocation.handle_location_update(data["position"])
+                    elif data["type"] == "geolocation_error":
+                        await geolocation.handle_error(
+                            data["error"].get("code", "UNKNOWN"),
+                            data["error"].get("message", "Unknown error")
+                        )
+                    elif data["type"] == "config_update":
+                        config = data.get("data", {}).get("config", {})
+                        await geolocation.start_tracking(config)
+                else:
+                    logger.warning(f"Received unknown message type: {data}")
                     
-                    # Update location tracking
-                    await manager.update_user_location(
-                        user.id,
-                        location_update.lat,
-                        location_update.lon,
-                        location_update.region_id
-                    )
-                    
-                    # Send status back to the user
-                    await websocket.send_json({
-                        "type": "location_update",
-                        "status": "ok",
-                        "timestamp": datetime.utcnow().isoformat()
-                    })
-                    
-                    last_update = current_time
-                    
-                except ValueError as e:
+            except WebSocketDisconnect:
+                logger.info(f"WebSocket disconnected for user {user.id}")
+                break
+            except ValueError as e:
+                logger.error(f"Value error processing message: {e}")
+                if websocket.client_state == WebSocketState.CONNECTED:
                     await websocket.send_json({
                         "type": "error",
                         "message": str(e)
                     })
-            
             except Exception as e:
-                logger.error(f"Error processing location update: {e}")
-                await websocket.send_json({
-                    "type": "error",
-                    "message": str(e)
-                })
+                logger.error(f"Error processing message: {e}")
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": str(e)
+                    })
+                break
     
     except WebSocketDisconnect:
-        await manager.disconnect(user.id)
-        location_manager.unregister_connection(user.id)
+        logger.info(f"WebSocket disconnected for user {user.id if user else 'unknown'}")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
+        if websocket.client_state != WebSocketState.CONNECTED:
+            await websocket.accept()
+        await websocket.send_json({
+            "type": "error",
+            "message": str(e)
+        })
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
     finally:
         # Ensure cleanup happens even on unexpected errors
         try:
-            await manager.disconnect(user.id)
-            location_manager.unregister_connection(user.id)
-        except:
-            pass
+            if geolocation:
+                await geolocation.stop_tracking()
+            if user:
+                await manager.disconnect(user.id)
+                location_manager.unregister_connection(user.id)
+            if db:
+                db.close()
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
 
 @router.post("/offline/package", dependencies=[Depends(get_current_active_user)])
 async def download_offline_package(

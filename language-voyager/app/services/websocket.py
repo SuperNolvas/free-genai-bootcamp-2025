@@ -26,12 +26,11 @@ class ConnectionManager:
         self.redis_url = settings.REDIS_URL
         
     async def connect(self, websocket: WebSocket, user_id: int) -> None:
-        """Accept connection and store it"""
+        """Store connection - does NOT accept it"""
         if user_id in self.active_connections:
             # Clean up existing connection first
             await self.disconnect(user_id)
             
-        await websocket.accept()
         self.active_connections[user_id] = websocket
         
         # Initialize Redis connection if needed
@@ -53,25 +52,30 @@ class ConnectionManager:
         if user_id in self.active_connections:
             try:
                 websocket = self.active_connections[user_id]
-                if websocket.client_state != WebSocketState.DISCONNECTED:
+                if websocket.client_state == WebSocketState.CONNECTED:
                     await websocket.close()
             except Exception as e:
                 logger.error(f"Error closing websocket: {e}")
             finally:
                 del self.active_connections[user_id]
+                # Clean up Redis data
+                try:
+                    self.redis.delete(f"user_location:{user_id}")
+                except Exception as e:
+                    logger.error(f"Error cleaning up Redis data: {e}")
     
     async def send_to_user(self, user_id: int, data: Dict[str, Any]) -> None:
         """Send data to a specific user"""
         if user_id in self.active_connections:
             websocket = self.active_connections[user_id]
-            if websocket.client_state != WebSocketState.DISCONNECTED:
+            if websocket.client_state == WebSocketState.CONNECTED:
                 try:
                     await websocket.send_json(data)
                 except Exception as e:
                     logger.error(f"Error sending message to user {user_id}: {e}")
                     await self.disconnect(user_id)
     
-    async def update_user_location(self, user_id: int, lat: float, lon: float, region_id: Optional[str] = None) -> None:
+    async def update_user_location(self, user_id: int, lat: float, lon: float, region_id: Optional[str] = None, accuracy: Optional[float] = None) -> None:
         """Update user's location in Redis"""
         if not self.redis:
             return
@@ -95,10 +99,15 @@ class ConnectionManager:
             await self.redis.hset(key, mapping=location_data)
             await self.redis.expire(key, 3600)  # 1 hour TTL
             
-            # Send confirmation to user
+            # Send confirmation to user with coordinates
             await self.send_to_user(user_id, {
                 "type": "location_update",
                 "status": "ok",
+                "coords": {
+                    "latitude": lat,
+                    "longitude": lon,
+                    "accuracy": accuracy
+                },
                 "timestamp": datetime.utcnow().isoformat()
             })
             
