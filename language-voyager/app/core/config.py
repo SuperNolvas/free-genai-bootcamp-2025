@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 240
     
     # Database
-    DATABASE_URL: str = "postgresql://postgres:postgres@db:5432/language_voyager"
+    DATABASE_URL: str = "postgresql://user:password@db:5432/language_voyager"
     
     # Redis - ensure these have secure defaults
     REDIS_HOST: str = "redis"

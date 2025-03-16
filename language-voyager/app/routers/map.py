@@ -11,7 +11,7 @@ from ..services.arcgis import ArcGISService
 from ..auth.utils import get_current_active_user
 from ..models.user import User
 from ..models.region import Region
-from ..models.poi import PointOfInterest
+from ..models.poi import PointOfInterest, POIContentConflict
 from ..models.progress import UserProgress
 from ..models.content import LanguageContent, ContentType
 from .schemas.map import Region as RegionSchema, POIResponse, POICreate, POIUpdate, POIUpdate, ContentDeliveryResponse
@@ -903,4 +903,246 @@ async def update_poi_content(
         success=True,
         message="POI content updated successfully",
         data=poi.get_version_info()
+    )
+
+@router.post("/pois/{poi_id}/content", response_model=ResponseModel[dict])
+async def update_poi_content(
+    poi_id: str,
+    content_update: dict,
+    background_tasks: BackgroundTasks,
+    client_version: int = Query(..., description="Client's current content version"),
+    change_description: str = Query(None, description="Description of content changes"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+    cache: RedisCache = Depends()
+) -> ResponseModel[dict]:
+    """Update POI content with version control"""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    poi = db.query(PointOfInterest).filter(PointOfInterest.id == poi_id).first()
+    if not poi:
+        raise HTTPException(status_code=404, detail="POI not found")
+    
+    # Check for version conflicts
+    if not poi.validate_content_version(client_version):
+        # Get changes since client version
+        changes = poi.get_content_diff(client_version)
+        raise HTTPException(
+            status_code=409, 
+            detail={
+                "message": "Content version mismatch",
+                "current_version": poi.content_version,
+                "client_version": client_version,
+                "changes": changes
+            }
+        )
+    
+    # Update content and version
+    poi.content.update(content_update)
+    poi.update_content_version(
+        change_description=change_description,
+        changed_by=current_user.email
+    )
+    
+    # Invalidate cache in background
+    background_tasks.add_task(cache.invalidate_poi_content, poi_id)
+    
+    db.commit()
+    
+    return ResponseModel(
+        success=True,
+        message="POI content updated successfully",
+        data=poi.get_version_info()
+    )
+
+@router.get("/pois/{poi_id}/history", response_model=ResponseModel[dict])
+async def get_content_history(
+    poi_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> ResponseModel[dict]:
+    """Get POI content version history"""
+    poi = db.query(PointOfInterest).filter(PointOfInterest.id == poi_id).first()
+    if not poi:
+        raise HTTPException(status_code=404, detail="POI not found")
+    
+    return ResponseModel(
+        success=True,
+        message="Retrieved content history",
+        data={"history": poi.content_history}
+    )
+
+@router.post("/pois/{poi_id}/resolve-conflict", response_model=ResponseModel[dict])
+async def resolve_content_conflict(
+    poi_id: str,
+    content_update: dict,
+    resolution_strategy: str = Query(..., description="Strategy for resolving conflict: merge or override"),
+    client_version: int = Query(..., description="Client's current content version"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+    cache: RedisCache = Depends()
+) -> ResponseModel[dict]:
+    """Resolve content version conflicts"""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    poi = db.query(PointOfInterest).filter(PointOfInterest.id == poi_id).first()
+    if not poi:
+        raise HTTPException(status_code=404, detail="POI not found")
+    
+    if resolution_strategy == "merge":
+        # Merge strategy: keep both versions' changes
+        for lang, content in content_update.items():
+            if lang not in poi.content:
+                poi.content[lang] = content
+            else:
+                poi.content[lang].update(content)
+    else:  # override
+        # Override strategy: client version completely replaces server version
+        poi.content = content_update
+    
+    # Update version with conflict resolution note
+    poi.update_content_version(
+        change_description=f"Conflict resolution ({resolution_strategy})",
+        changed_by=current_user.email
+    )
+    
+    # Invalidate cache
+    await cache.invalidate_poi_content(poi_id)
+    
+    db.commit()
+    
+    return ResponseModel(
+        success=True,
+        message=f"Content conflict resolved using {resolution_strategy} strategy",
+        data=poi.get_version_info()
+    )
+
+class ConflictResolution(BaseModel):
+    strategy: str = Field(..., description="Resolution strategy (accept, merge)")
+    merge_strategy: Optional[str] = Field(None, description="Merge strategy if using merge resolution")
+    merged_content: Optional[Dict] = Field(None, description="Manual merged content if needed")
+
+@router.get("/pois/{poi_id}/conflicts", response_model=ResponseModel[List[Dict]])
+async def list_poi_conflicts(
+    poi_id: str,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> ResponseModel[List[Dict]]:
+    """List all conflicts for a POI"""
+    poi = db.query(PointOfInterest).filter(PointOfInterest.id == poi_id).first()
+    if not poi:
+        raise HTTPException(status_code=404, detail="POI not found")
+        
+    query = db.query(POIContentConflict).filter(POIContentConflict.poi_id == poi_id)
+    if status:
+        query = query.filter(POIContentConflict.status == status)
+        
+    conflicts = query.all()
+    return ResponseModel(
+        success=True,
+        message="Conflicts retrieved successfully",
+        data=[{
+            "id": c.id,
+            "base_version": c.base_version,
+            "conflict_type": c.conflict_type,
+            "status": c.status,
+            "created_at": c.created_at,
+            "resolved_at": c.resolved_at,
+            "resolved_by": c.resolved_by,
+            "proposed_changes": c.proposed_changes,
+            "metadata": c.metadata
+        } for c in conflicts]
+    )
+
+@router.post("/pois/{poi_id}/content/draft", response_model=ResponseModel[Dict])
+async def create_content_draft(
+    poi_id: str,
+    changes: Dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> ResponseModel[Dict]:
+    """Create a draft change for POI content"""
+    poi = db.query(PointOfInterest).filter(PointOfInterest.id == poi_id).first()
+    if not poi:
+        raise HTTPException(status_code=404, detail="POI not found")
+        
+    conflict = poi.create_pending_change(changes)
+    db.add(conflict)
+    db.commit()
+    
+    return ResponseModel(
+        success=True,
+        message="Draft changes created successfully",
+        data={
+            "conflict_id": conflict.id,
+            "status": conflict.status,
+            "base_version": conflict.base_version
+        }
+    )
+
+@router.post("/pois/{poi_id}/conflicts/{conflict_id}/resolve", response_model=ResponseModel[Dict])
+async def resolve_content_conflict(
+    poi_id: str,
+    conflict_id: str,
+    resolution: ConflictResolution,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> ResponseModel[Dict]:
+    """Resolve a content conflict"""
+    poi = db.query(PointOfInterest).filter(PointOfInterest.id == poi_id).first()
+    if not poi:
+        raise HTTPException(status_code=404, detail="POI not found")
+        
+    resolution_data = {
+        "strategy": resolution.strategy,
+        "merge_strategy": resolution.merge_strategy
+    }
+    if resolution.merged_content:
+        resolution_data["merged_content"] = resolution.merged_content
+        
+    success = poi.resolve_conflict(
+        conflict_id=conflict_id,
+        resolution=resolution_data,
+        resolved_by=current_user.username
+    )
+    
+    if not success:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not resolve conflict. It may not exist or is already resolved."
+        )
+        
+    db.commit()
+    return ResponseModel(
+        success=True,
+        message="Conflict resolved successfully",
+        data=poi.get_version_info()
+    )
+
+@router.post("/pois/{poi_id}/rollback/{version}", response_model=ResponseModel[Dict])
+async def rollback_content_version(
+    poi_id: str,
+    version: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> ResponseModel[Dict]:
+    """Rollback POI content to a specific version"""
+    poi = db.query(PointOfInterest).filter(PointOfInterest.id == poi_id).first()
+    if not poi:
+        raise HTTPException(status_code=404, detail="POI not found")
+        
+    if not poi.rollback_to_version(version):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not rollback to version {version}. Version may not exist."
+        )
+        
+    db.commit()
+    return ResponseModel(
+        success=True,
+        message=f"Created rollback request to version {version}",
+        data={"pending_changes": [c.id for c in poi.get_pending_changes()]}
     )
