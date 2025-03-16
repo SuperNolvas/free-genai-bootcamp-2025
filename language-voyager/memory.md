@@ -1659,13 +1659,46 @@ Legend:
 ⏳ In Progress/Partial
 ❌ Not Started
 
-## Websocket Tested Successfully
+
+## HTTP and Websocket Authentication, seperation of concerns and explanation
+
+Let me search through the codebase to understand the specific purposes of both authentication mechanisms:Based on the code analysis, here's the specific purpose of each authentication type in this project:
+
+1. HTTP Authentication (using OAuth2PasswordBearer):
+- Used for regular API endpoints that handle discrete, one-time requests
+- Handles user login, registration, and general API access
+- Manages access to resources like user profiles, progress data, and map data
+- Uses FastAPI's dependency injection system for clean integration with route handlers
+- Primarily used for CRUD operations and data retrieval/updates
+
+2. WebSocket Authentication (custom implementation):
+- Specifically designed for real-time location tracking
+- Maintains a persistent connection for continuous location updates from users
+- Handles rate-limiting of location updates (using LOCATION_UPDATE_MIN_INTERVAL)
+- Manages Redis-based location tracking for all active users
+- Used for real-time features like:
+  - User location updates
+  - Proximity-based triggers
+  - Real-time error handling for location services
+  - Region tracking
+  - Real-time notifications when users enter new areas
+
+They're separate because:
+1. WebSockets need a different authentication approach since they maintain a long-lived connection, unlike HTTP's request-response model
+2. The WebSocket connection needs to be fast and efficient since it's handling real-time updates
+3. WebSockets don't work with FastAPI's standard dependency injection system (which is why we had to implement custom authentication)
+4. The WebSocket connection manages stateful information (like last update time and connection status) that isn't relevant to regular HTTP endpoints
+
+This separation allows the application to handle both traditional web API requests and real-time location tracking efficiently, each with authentication methods optimized for their specific use case.
+
+## Websocket testing
 
 ```sh
-docker exec -it language-voyager-web-1 wscat -c "ws://web:8000/ws/location" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0MkBleGFtcGxlLmNvbSIsImV4cCI6MTc0MjA3MjczNn0.oT1TV3FJyFrCRnTqdY28M_UpU-mbFrv0pjEgD4q8Du0"
+  docker exec -it language-voyager-web-1 wscat -c "ws://web:8000/api/v1/map/ws/location" -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0MkBleGFtcGxlLmNvbSIsImV4cCI6MTc0MjA5MTY3MX0.W1P4UmXNMhtiSxI9biDgM7fozbFylyJFg-VRv8QuTMk"
 Connected (press CTRL+C to quit)
-< {"type":"connected","message":"Successfully connected to location service","user_id":3}
+> {"lat": 35.6812, "lon": 139.7671, "region_id": "tokyo-station"}
+< {"type":"location_update","status":"ok","timestamp":"2025-03-16T01:56:36.169684"}
 > {"action": "get_status"}
-< {"success":true}
+< {"type":"location_update","status":"ok","timestamp":"2025-03-16T02:01:22.963946"}
 > 
 ```

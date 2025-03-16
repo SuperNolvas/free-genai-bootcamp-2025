@@ -9,15 +9,16 @@ from .routers import auth, progress as progress_router, map, conversation
 from .core.config import get_settings
 from .services.arcgis import ArcGISService
 from .services.sync_manager import SyncManager
-from .services.websocket import ConnectionManager, manager
+from .services.websocket import ConnectionManager, manager, LocationUpdate
 from .services.location_manager import location_manager
-from .auth.utils import get_current_user, get_current_active_user, oauth2_scheme
+from .auth.websocket_auth import authenticate_websocket_user
 from .models.user import User
 from starlette.websockets import WebSocketState
-from jose import JWTError, jwt
+from jose import JWTError, jwt, ExpiredSignatureError
 import json
 import logging
 import asyncio
+import datetime
 from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -88,80 +89,166 @@ app.include_router(
 )
 
 async def get_websocket_user(websocket: WebSocket) -> User:
+    """Authenticate WebSocket connection and return user"""
     try:
-        auth_header = websocket.headers.get('authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Not authenticated")
+        auth = websocket.headers.get("authorization", "")
+        if not auth:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Not authenticated"
             )
-            
-        token = auth_header.split(' ')[1]
+        
+        # Handle both "Bearer token" and raw token formats
+        token = auth
+        if auth.lower().startswith("bearer"):
+            token = auth.split(" ")[1]
+        
         try:
             payload = jwt.decode(
-                token, 
-                settings.JWT_SECRET_KEY,  # Using JWT_SECRET_KEY consistently
+                token,
+                settings.JWT_SECRET_KEY,
                 algorithms=[settings.JWT_ALGORITHM]
             )
-            username: str = payload.get("sub")
-            if username is None:
+            email = payload.get("sub")
+            if not email:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Could not validate credentials"
                 )
+        except ExpiredSignatureError:
+            logger.warning("WebSocket connection error: Token has expired")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has expired"
+            )
         except JWTError as e:
             logger.error(f"JWT validation error: {str(e)}")
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials"
             )
-            
+
         db = SessionLocal()
         try:
-            user = await get_current_user(token, db)
+            user = db.query(User).filter(User.email == email).first()
             if not user:
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="User not found")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="User not found"
                 )
+            if not user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Inactive user"
+                )
             return user
         finally:
             db.close()
-            
+
     except HTTPException as e:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e.detail))
+        logger.warning(f"WebSocket connection error: {e.detail}")
+        if websocket.client_state != WebSocketState.DISCONNECTED:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         raise
     except Exception as e:
-        logger.error(f"WebSocket authentication error: {str(e)}")
-        await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Internal server error")
-        raise
+        logger.error(f"Unexpected WebSocket error: {str(e)}")
+        if websocket.client_state != WebSocketState.DISCONNECTED:
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
 
-@app.websocket("/ws/location")
-async def websocket_endpoint(
-    websocket: WebSocket,
-    user: User = Depends(get_websocket_user)
-):
+# Update WebSocket endpoint to handle async Redis properly
+@app.websocket("/api/v1/map/ws/location")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time location updates"""
+    user = None
+    db = None
     try:
         await websocket.accept()
+        
+        # Get database session
+        db = SessionLocal()
+        
+        # Authenticate using websocket-specific auth function
+        user = await authenticate_websocket_user(websocket, db)
+        
+        # Register connection with manager
         await manager.connect(websocket, user.id)
+        last_update = datetime.utcnow().timestamp()
         
         while True:
             try:
                 data = await websocket.receive_json()
-                result = await manager.update_user_location(user.id, data.get('lat'), data.get('lon'), data.get('region_id'))
-                await websocket.send_json(result)
-            except json.JSONDecodeError:
-                await websocket.close(code=4000, reason="Invalid JSON")
-            except Exception as e:
-                logger.error(f"WebSocket error: {str(e)}")
-                await websocket.close(code=4000, reason=str(e))
-                break
                 
-    except WebSocketDisconnect:
-        await manager.disconnect(user.id)
+                # Rate limiting check
+                current_time = datetime.utcnow().timestamp()
+                if current_time - last_update < settings.LOCATION_UPDATE_MIN_INTERVAL:
+                    continue
+                
+                if "error" in data:
+                    # Handle location errors
+                    error_response = await location_manager.handle_location_error(
+                        user.id,
+                        data["error"].get("code", "UNKNOWN"),
+                        data["error"].get("message", "Unknown error")
+                    )
+                    await websocket.send_json({
+                        "type": "error_action",
+                        **error_response
+                    })
+                    continue
+                
+                # Validate location data
+                location_update = LocationUpdate(
+                    lat=data.get('lat'),
+                    lon=data.get('lon'),
+                    region_id=data.get('region_id'),
+                    timestamp=current_time
+                )
+                
+                # Update location tracking
+                await manager.update_user_location(
+                    user.id,
+                    location_update.lat,
+                    location_update.lon,
+                    location_update.region_id
+                )
+                
+                # Send status back to the user
+                await websocket.send_json({
+                    "type": "location_update",
+                    "status": "ok",
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                
+                last_update = current_time
+                
+            except WebSocketDisconnect:
+                break
+            except ValueError as e:
+                await websocket.send_json({
+                    "type": "error",
+                    "message": str(e)
+                })
+            except Exception as e:
+                logger.error(f"Error processing location update: {e}")
+                await websocket.send_json({
+                    "type": "error",
+                    "message": str(e)
+                })
+    
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        if websocket.client_state != WebSocketState.DISCONNECTED:
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+    finally:
+        # Ensure cleanup happens even on unexpected errors
+        if user:
+            await manager.disconnect(user.id)
+        if db:
+            db.close()
 
 @app.on_event("startup")
 async def startup_event():
@@ -172,6 +259,7 @@ async def startup_event():
 async def shutdown_event():
     """Clean up services on shutdown"""
     await location_manager.stop()
+    await manager.cleanup()  # Add Redis cleanup
 
 @app.get("/")
 async def root():

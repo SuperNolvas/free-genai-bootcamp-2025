@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, BackgroundTasks, status
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 from typing import Dict, List, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
 import logging
-from ..database.config import get_db
+from ..database.config import get_db, SessionLocal
 from ..services.arcgis import ArcGISService
 from ..auth.utils import get_current_active_user
 from ..models.user import User
@@ -21,13 +21,13 @@ from ..services.websocket import manager, LocationUpdate
 from ..services.offline_maps import OfflineMapService
 from ..services.location_manager import location_manager
 import asyncio
+from ..auth.websocket_auth import authenticate_websocket_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/map",
-    tags=["map"],
-    dependencies=[Depends(get_current_active_user)]
+    tags=["map"]
 )
 
 # Rate limiting configuration
@@ -42,7 +42,7 @@ async def get_arcgis_service(db: Session = Depends(get_db)) -> ArcGISService:
 def get_offline_map_service(db: Session = Depends(get_db)) -> OfflineMapService:
     return OfflineMapService(db)
 
-@router.get("/regions", response_model=ResponseModel[List[RegionSchema]])
+@router.get("/regions", response_model=ResponseModel[List[RegionSchema]], dependencies=[Depends(get_current_active_user)])
 async def list_available_regions(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -104,7 +104,7 @@ async def list_available_regions(
         data=region_responses
     )
 
-@router.get("/region/{region_id}/pois", response_model=ResponseModel[List[POIResponse]])
+@router.get("/region/{region_id}/pois", response_model=ResponseModel[List[POIResponse]], dependencies=[Depends(get_current_active_user)])
 async def get_region_pois(
     region_id: str,
     poi_type: str = Query(None, description="Type of POI to filter by"),
@@ -150,7 +150,7 @@ async def get_route(
     end_point = {"lat": end_lat, "lon": end_lon}
     return await service.get_route(start_point, end_point)
 
-@router.post("/location/update")
+@router.post("/location/update", dependencies=[Depends(get_current_active_user)])
 async def update_location(
     lat: float,
     lon: float,
@@ -192,7 +192,7 @@ async def get_map_layers(
     """Get available map layers for a region"""
     return await service.get_region_layers(region_id)
 
-@router.get("/pois/nearby", response_model=ResponseModel[List[POIResponse]])
+@router.get("/pois/nearby", response_model=ResponseModel[List[POIResponse]], dependencies=[Depends(get_current_active_user)])
 async def get_nearby_points_of_interest(
     lat: float,
     lon: float,
@@ -217,7 +217,7 @@ async def get_nearby_points_of_interest(
         data=pois
     )
 
-@router.post("/pois", response_model=ResponseModel[POIResponse])
+@router.post("/pois", response_model=ResponseModel[POIResponse], dependencies=[Depends(get_current_active_user)])
 async def create_poi(
     poi: POICreate,
     db: Session = Depends(get_db),
@@ -249,7 +249,7 @@ async def create_poi(
         data=db_poi
     )
 
-@router.patch("/pois/{poi_id}", response_model=ResponseModel[POIResponse])
+@router.patch("/pois/{poi_id}", response_model=ResponseModel[POIResponse], dependencies=[Depends(get_current_active_user)])
 async def update_poi(
     poi_id: str,
     poi_update: POIUpdate,
@@ -277,7 +277,7 @@ async def update_poi(
         data=db_poi
     )
 
-@router.get("/pois/{poi_id}/content", response_model=ResponseModel[ContentDeliveryResponse])
+@router.get("/pois/{poi_id}/content", response_model=ResponseModel[ContentDeliveryResponse], dependencies=[Depends(get_current_active_user)])
 async def get_poi_content(
     poi_id: str,
     language: str = Query(..., description="Language code (e.g., 'ja' for Japanese)"),
@@ -466,18 +466,22 @@ def _determine_formality_level(poi_type: str) -> str:
     return "neutral"
 
 @router.websocket("/ws/location")
-async def websocket_endpoint(
-    websocket: WebSocket,
-    current_user: User = Depends(get_current_active_user),
-    service: ArcGISService = Depends(get_arcgis_service),
-    db: Session = Depends(get_db)
-):
-    # Register connection with both managers
-    await manager.connect(websocket, current_user.id)
-    location_manager.register_connection(current_user.id, websocket)
-    last_update = datetime.utcnow().timestamp()
-    
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time location updates"""
+    user = None
+    db = None
     try:
+        # Get database session
+        db = SessionLocal()
+        
+        # Authenticate using websocket-specific auth function
+        user = await authenticate_websocket_user(websocket, db)
+        
+        # Register connection with both managers
+        await manager.connect(websocket, user.id)
+        location_manager.register_connection(user.id, websocket)
+        last_update = datetime.utcnow().timestamp()
+        
         while True:
             try:
                 data = await websocket.receive_json()
@@ -490,7 +494,7 @@ async def websocket_endpoint(
                 if "error" in data:
                     # Handle location errors
                     error_response = await location_manager.handle_location_error(
-                        current_user.id,
+                        user.id,
                         data["error"].get("code", "UNKNOWN"),
                         data["error"].get("message", "Unknown error")
                     )
@@ -500,19 +504,8 @@ async def websocket_endpoint(
                     })
                     continue
                 
-                # Get user's location preferences
-                location_prefs = current_user.location_preferences or {}
-                
-                # Check if power state needs updating
-                power_update = location_manager.update_power_state(current_user.id, location_prefs)
-                if power_update:
-                    await websocket.send_json({
-                        "type": "power_state_update",
-                        **power_update
-                    })
-                
                 try:
-                    # Validate location data using LocationUpdate model
+                    # Validate location data
                     location_update = LocationUpdate(
                         lat=data.get('lat'),
                         lon=data.get('lon'),
@@ -520,33 +513,24 @@ async def websocket_endpoint(
                         timestamp=current_time
                     )
                     
-                    # Update location and get triggers
-                    triggers = await service.check_proximity_triggers(
-                        location_update.lat, 
-                        location_update.lon, 
-                        current_user.id
-                    )
-                    
-                    # Update location tracking in both managers
+                    # Update location tracking
                     await manager.update_user_location(
-                        current_user.id, 
-                        location_update.lat, 
-                        location_update.lon, 
+                        user.id,
+                        location_update.lat,
+                        location_update.lon,
                         location_update.region_id
                     )
                     
-                    # Send triggers and status back to the user
+                    # Send status back to the user
                     await websocket.send_json({
                         "type": "location_update",
-                        "triggers": triggers,
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "power_state": location_manager.state.power_states.get(current_user.id)
+                        "status": "ok",
+                        "timestamp": datetime.utcnow().isoformat()
                     })
                     
                     last_update = current_time
                     
                 except ValueError as e:
-                    # Handle validation errors
                     await websocket.send_json({
                         "type": "error",
                         "message": str(e)
@@ -560,14 +544,20 @@ async def websocket_endpoint(
                 })
     
     except WebSocketDisconnect:
-        await manager.disconnect(current_user.id)
-        location_manager.unregister_connection(current_user.id)
-    
+        await manager.disconnect(user.id)
+        location_manager.unregister_connection(user.id)
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
     finally:
         # Ensure cleanup happens even on unexpected errors
-        location_manager.unregister_connection(current_user.id)
+        try:
+            await manager.disconnect(user.id)
+            location_manager.unregister_connection(user.id)
+        except:
+            pass
 
-@router.post("/offline/package")
+@router.post("/offline/package", dependencies=[Depends(get_current_active_user)])
 async def download_offline_package(
     region_id: str,
     bounds: Dict,
@@ -582,7 +572,7 @@ async def download_offline_package(
         zoom_levels=zoom_levels
     )
 
-@router.get("/offline/status/{region_id}")
+@router.get("/offline/status/{region_id}", dependencies=[Depends(get_current_active_user)])
 async def check_offline_package_status(
     region_id: str,
     timestamp: Optional[str] = None,
@@ -595,7 +585,7 @@ async def check_offline_package_status(
         timestamp=timestamp
     )
 
-@router.post("/offline/sync/{region_id}")
+@router.post("/offline/sync/{region_id}", dependencies=[Depends(get_current_active_user)])
 async def sync_offline_changes(
     region_id: str,
     offline_data: Dict,
@@ -612,7 +602,7 @@ class RegionGeometry(BaseModel):
     type: str
     coordinates: List[List[float]]
 
-@router.post("/regions/spatial-analysis")
+@router.post("/regions/spatial-analysis", dependencies=[Depends(get_current_active_user)])
 async def analyze_region_spatial_relationships(
     geometry: RegionGeometry,
     region_id: str,
@@ -622,7 +612,7 @@ async def analyze_region_spatial_relationships(
     """Analyze spatial relationships between provided geometry and region features"""
     return await service.analyze_spatial_relationships(geometry.dict(), region_id)
 
-@router.post("/regions/route")
+@router.post("/regions/route", dependencies=[Depends(get_current_active_user)])
 async def find_region_route(
     points: List[Dict[str, float]],
     region_id: str,
@@ -633,7 +623,7 @@ async def find_region_route(
     """Find optimal route between multiple points within a region"""
     return await service.find_optimal_route(points, region_id, optimize_for)
 
-@router.get("/regions/{region_id}/boundary")
+@router.get("/regions/{region_id}/boundary", dependencies=[Depends(get_current_active_user)])
 async def get_region_boundary_geometry(
     region_id: str,
     service: ArcGISService = Depends(get_arcgis_service),
@@ -642,7 +632,7 @@ async def get_region_boundary_geometry(
     """Get detailed boundary geometry for a region"""
     return await service.get_region_boundary(region_id)
 
-@router.get("/regions/{region_id}/check-intersection")
+@router.get("/regions/{region_id}/check-intersection", dependencies=[Depends(get_current_active_user)])
 async def check_region_point_intersection(
     lat: float,
     lon: float,
@@ -653,7 +643,7 @@ async def check_region_point_intersection(
     """Check if a point intersects with region boundaries and get metadata"""
     return await service.check_region_intersection(lat, lon, region_id)
 
-@router.get("/regions/{region_id}/analytics")
+@router.get("/regions/{region_id}/analytics", dependencies=[Depends(get_current_active_user)])
 async def get_region_analytics(
     region_id: str,
     service: ArcGISService = Depends(get_arcgis_service),
@@ -662,7 +652,7 @@ async def get_region_analytics(
     """Get advanced spatial analytics for a region"""
     return await service.get_region_analytics(region_id)
 
-@router.get("/regions/{region_id}/similar")
+@router.get("/regions/{region_id}/similar", dependencies=[Depends(get_current_active_user)])
 async def find_similar_regions(
     region_id: str,
     criteria: List[str] = Query(["density", "poi_types"], description="Criteria to match"),
@@ -672,7 +662,7 @@ async def find_similar_regions(
     """Find regions with similar characteristics"""
     return await service.find_similar_regions(region_id, criteria)
 
-@router.get("/regions/{region_id}/connectivity")
+@router.get("/regions/{region_id}/connectivity", dependencies=[Depends(get_current_active_user)])
 async def analyze_region_connectivity(
     region_id: str,
     service: ArcGISService = Depends(get_arcgis_service),
@@ -681,7 +671,7 @@ async def analyze_region_connectivity(
     """Analyze region connectivity and accessibility"""
     return await service.analyze_region_connectivity(region_id)
 
-@router.get("/regions/{region_id}/clusters")
+@router.get("/regions/{region_id}/clusters", dependencies=[Depends(get_current_active_user)])
 async def get_region_clustering(
     region_id: str,
     feature_type: str = Query(..., description="Type of feature to cluster"),
@@ -691,7 +681,7 @@ async def get_region_clustering(
     """Get spatial clusters of specific features within a region"""
     return await service.get_region_clustering(region_id, feature_type)
 
-@router.post("/regions/transitions", response_model=ResponseModel)
+@router.post("/regions/transitions", response_model=ResponseModel, dependencies=[Depends(get_current_active_user)])
 async def check_region_transitions(
     location: Dict[str, float],
     previous_location: Optional[Dict[str, float]] = None,
@@ -722,7 +712,7 @@ async def check_region_transitions(
         data=transitions
     )
 
-@router.get("/regions/nearby", response_model=ResponseModel)
+@router.get("/regions/nearby", response_model=ResponseModel, dependencies=[Depends(get_current_active_user)])
 async def get_nearby_regions(
     lat: float,
     lon: float,
@@ -747,7 +737,7 @@ async def get_nearby_regions(
         data=nearby
     )
 
-@router.get("/regions/{region_id}/region-analytics")  # Changed path to avoid operation ID conflict
+@router.get("/regions/{region_id}/region-analytics", dependencies=[Depends(get_current_active_user)])  # Changed path to avoid operation ID conflict
 async def get_region_analytics(
     region_id: str,
     current_user: User = Depends(get_current_active_user),
@@ -807,7 +797,7 @@ class GeolocationConfig(BaseModel):
             }
         }
     
-@router.get("/location/config")
+@router.get("/location/config", dependencies=[Depends(get_current_active_user)])
 async def get_location_config(
     current_user: User = Depends(get_current_active_user)
 ) -> ResponseModel[GeolocationConfig]:
@@ -825,7 +815,7 @@ async def get_location_config(
         data=config
     )
 
-@router.post("/location/config")
+@router.post("/location/config", dependencies=[Depends(get_current_active_user)])
 async def update_location_config(
     config: GeolocationConfig,
     current_user: User = Depends(get_current_active_user),
@@ -845,7 +835,7 @@ async def update_location_config(
         data=config
     )
 
-@router.get("/pois/{poi_id}/version", response_model=ResponseModel[dict])
+@router.get("/pois/{poi_id}/version", response_model=ResponseModel[dict], dependencies=[Depends(get_current_active_user)])
 async def check_poi_version(
     poi_id: str,
     client_version: int = Query(..., description="Client's current content version"),
@@ -869,7 +859,7 @@ async def check_poi_version(
         }
     )
 
-@router.post("/pois/{poi_id}/content", response_model=ResponseModel[dict])
+@router.post("/pois/{poi_id}/content", response_model=ResponseModel[dict], dependencies=[Depends(get_current_active_user)])
 async def update_poi_content(
     poi_id: str,
     background_tasks: BackgroundTasks,

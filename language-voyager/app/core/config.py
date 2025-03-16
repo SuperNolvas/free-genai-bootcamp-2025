@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings
 from typing import List, Optional
 from functools import lru_cache
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pathlib import Path
 
 class Settings(BaseSettings):
@@ -13,67 +13,66 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Language Voyager"
     DEBUG: bool = False
     
-    # Authentication
-    JWT_SECRET_KEY: str = "development-secret-key-change-in-production"
-    SECRET_KEY: str = "development-secret-key-change-in-production"  # For backwards compatibility
+    # Authentication - making these non-optional with secure defaults
+    JWT_SECRET_KEY: str = Field(default="development-secret-key-change-in-production-00112233445566778899")
+    SECRET_KEY: str = Field(default="development-secret-key-change-in-production-00112233445566778899")
     JWT_ALGORITHM: str = "HS256"
-    ALGORITHM: str = "HS256"  # For backwards compatibility
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ALGORITHM: str = "HS256"  # Keeping both for backwards compatibility
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 240
     
     # Database
-    DATABASE_URL: str
+    DATABASE_URL: str = "postgresql://postgres:postgres@db:5432/language_voyager"
     
-    # Redis
-    REDIS_URL: str = "redis://redis:6379/0"
-    
-    # Redis settings
-    REDIS_HOST: str = "redis"  # Docker service name
+    # Redis - ensure these have secure defaults
+    REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
+    REDIS_URL: str = "redis://redis:6379/0"
     
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
     
     # ArcGIS
-    ARCGIS_API_KEY: str | None = None
-    ARCGIS_MAX_CREDITS_PER_DAY: float = 10.0  # Conservative daily limit
-    ARCGIS_CACHE_DURATION: int = 24 * 60 * 60  # Cache responses for 24 hours
-    ARCGIS_FEATURE_LIMIT: int = 100  # Limit features per request
+    ARCGIS_API_KEY: Optional[str] = None
+    ARCGIS_MAX_CREDITS_PER_DAY: float = 10.0
+    ARCGIS_CACHE_DURATION: int = 24 * 60 * 60
+    ARCGIS_FEATURE_LIMIT: int = 100
     
     # OpenRouter settings
     OPENROUTER_API_KEY: Optional[str] = None
-    OPENROUTER_DEFAULT_MODEL: Optional[str] = None  # e.g. "mistralai/mistral-7b" or "anthropic/claude-2"
+    OPENROUTER_DEFAULT_MODEL: Optional[str] = None
     
     # Location Updates
-    LOCATION_UPDATE_MIN_INTERVAL: float = 1.0  # Minimum seconds between updates
-    LOCATION_UPDATE_BURST_LIMIT: int = 5  # Maximum burst updates allowed
-    LOCATION_UPDATE_BURST_PERIOD: int = 60  # Period (in seconds) for burst limit
-    LOCATION_CHANGE_MIN_DISTANCE: float = 1.0  # Minimum distance (meters) required between updates
+    LOCATION_UPDATE_MIN_INTERVAL: float = 1.0
+    LOCATION_UPDATE_BURST_LIMIT: int = 5
+    LOCATION_UPDATE_BURST_PERIOD: int = 60
+    LOCATION_CHANGE_MIN_DISTANCE: float = 1.0
 
     # Offline storage settings
     LOCAL_STORAGE_PATH: str = str(Path.home() / ".language-voyager" / "storage")
-    OFFLINE_PACKAGE_TTL: int = 86400  # 24 hours in seconds
+    OFFLINE_PACKAGE_TTL: int = 86400  # 24 hours
     MAX_OFFLINE_STORAGE_SIZE: int = 1024 * 1024 * 1024  # 1GB
     SYNC_RETRY_ATTEMPTS: int = 3
-    SYNC_RETRY_DELAY: int = 5  # seconds
-    MIN_SYNC_INTERVAL: int = 300  # 5 minutes between syncs
+    SYNC_RETRY_DELAY: int = 5
+    MIN_SYNC_INTERVAL: int = 300  # 5 minutes
 
     model_config = ConfigDict(
         env_file=".env",
         case_sensitive=True,
-        extra="allow"  # Allow extra fields in environment
+        extra="allow",
     )
 
     def __init__(self, **data):
         super().__init__(**data)
-        # Ensure SECRET_KEY is set for backwards compatibility
-        if not hasattr(self, 'SECRET_KEY') and hasattr(self, 'JWT_SECRET_KEY'):
-            self.SECRET_KEY = self.JWT_SECRET_KEY
+        # Ensure SECRET_KEY and JWT_SECRET_KEY are always the same
+        self.JWT_SECRET_KEY = self.SECRET_KEY = self.JWT_SECRET_KEY or self.SECRET_KEY
+        # Ensure algorithms are consistent
+        self.ALGORITHM = self.JWT_ALGORITHM
+        # Set Redis URL if individual components are provided
+        if not self.REDIS_URL and self.REDIS_HOST:
+            self.REDIS_URL = f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
 @lru_cache()
 def get_settings() -> Settings:
-    """
-    Creates a cached instance of settings.
-    Use this function to get settings throughout the application.
-    """
+    """Get cached settings instance"""
     return Settings()

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
+from typing import Annotated
 from ..database.config import get_db
 from ..models.user import User
 from ..auth.utils import (
@@ -31,7 +32,7 @@ class Token(BaseModel):
 class UserResponse(BaseModel):
     id: int
     email: str
-    username: str
+    username: str | None = None
     is_active: bool
     
     model_config = ConfigDict(from_attributes=True)
@@ -78,5 +79,9 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.get("/me", response_model=UserResponse)
-async def read_users_me(current_user: User = Depends(get_current_active_user)):
+async def read_users_me(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Annotated[Session, Depends(get_db)]
+) -> UserResponse:
+    """Get current user info"""
     return current_user
