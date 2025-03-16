@@ -1662,7 +1662,7 @@ Legend:
 
 ## HTTP and Websocket Authentication, seperation of concerns and explanation
 
-Let me search through the codebase to understand the specific purposes of both authentication mechanisms:Based on the code analysis, here's the specific purpose of each authentication type in this project:
+Here's the specific purpose of each authentication type in this project:
 
 1. HTTP Authentication (using OAuth2PasswordBearer):
 - Used for regular API endpoints that handle discrete, one-time requests
