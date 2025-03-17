@@ -311,14 +311,14 @@ async def get_poi_content(
     progress = db.query(UserProgress).filter(
         UserProgress.user_id == current_user.id,
         UserProgress.language == language,
-        UserProgress.region_name == poi.region_id  # Match the region_id from the POI
+        (UserProgress.region_id == poi.region_id) | (UserProgress.region_name == poi.region_id)  # Try both fields
     ).first()
 
     if not progress:
         progress = UserProgress(
             user_id=current_user.id,
             language=language,
-            region_name=poi.region_id,  # Use region_id consistently 
+            region_id=poi.region_id,  # Use region_id consistently
             proficiency_level=proficiency_level,
             poi_progress={},
             content_mastery={},
@@ -326,6 +326,7 @@ async def get_poi_content(
         )
         db.add(progress)
         db.commit()
+        db.refresh(progress)  # Fixed: Use db instead of test_db
 
     # Get current POI progress
     poi_progress = progress.poi_progress.get(poi_id, {})
@@ -345,10 +346,11 @@ async def get_poi_content(
     for ct, items in progress.content_mastery.items():
         mastery_values.extend(items.values())
     
+    # Calculate average mastery and factor (30% max increase)
     avg_mastery = sum(mastery_values) / len(mastery_values) if mastery_values else 0
-    mastery_factor = (avg_mastery / 100) * 0.3  # Max 30% increase from mastery
+    mastery_factor = (avg_mastery / 100) * 0.3
     
-    # Visit factor calculation (max 20% increase)
+    # Visit factor calculation (20% max)
     poi_visits = progress.poi_progress.get(poi.id, {}).get("visits", 0)
     visit_factor = min((poi_visits / 10) * 0.2, 0.2)
     
@@ -356,9 +358,19 @@ async def get_poi_content(
     total_adjustment = min(mastery_factor + visit_factor, 0.2)
     current_difficulty = poi.difficulty * (1 + total_adjustment)
     
-    # Ensure progression when user has progress
+    # Always ensure some progression when user has progress
     if mastery_values or poi_visits > 0:
-        current_difficulty = max(current_difficulty, poi.difficulty + 0.1)
+        base_increase = poi.difficulty * 0.05  # Minimum 5% increase
+        current_difficulty = max(current_difficulty, poi.difficulty + base_increase)
+    
+    # Calculate difficulty progression
+    difficulty_progression = {}
+    base = poi.difficulty
+    for visit in range(poi_visits + 1, poi_visits + 6):
+        next_visit_factor = min((visit / 10) * 0.2, 0.2)
+        next_adjustment = min(mastery_factor + next_visit_factor, 0.2)
+        next_difficulty = base * (1 + next_adjustment)
+        difficulty_progression[f"visit_{visit}"] = next_difficulty
 
     # Get content recommendations
     content_results = {}
@@ -383,7 +395,7 @@ async def get_poi_content(
     base = poi.difficulty
     for visit in range(poi_visits + 1, poi_visits + 6):
         next_visit_factor = min((visit / 10) * 0.2, 0.2)
-        next_adjustment = min(mastery_factor + next_visit_factor, 0.2)  # Cap at 20%
+        next_adjustment = min(mastery_factor + visit_factor, 0.2)  # Cap at 20%
         next_difficulty = base * (1 + next_adjustment)
         difficulty_progression[f"visit_{visit}"] = next_difficulty
 

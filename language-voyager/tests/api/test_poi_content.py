@@ -433,11 +433,11 @@ async def test_content_recommendation(async_client, test_user, test_poi, test_co
     progress = UserProgress(
         user_id=test_user.id,
         language="ja",
-        region_id=test_poi.region_id,  # Fix: Use region_id instead of region
+        region_id=test_poi.region_id,
         proficiency_level=50,
         poi_progress={
             test_poi.id: {
-                "visits": 2,  
+                "visits": 2,
                 "completed_content": ["vocab_1"],
                 "total_time": 600,
                 "last_visit": str(datetime.utcnow())
@@ -449,7 +449,10 @@ async def test_content_recommendation(async_client, test_user, test_poi, test_co
         achievements=[]
     )
     test_db.add(progress)
+    flag_modified(progress, "poi_progress")  # Mark JSON field as modified
+    flag_modified(progress, "content_mastery")  # Mark JSON field as modified
     test_db.commit()
+    test_db.refresh(progress)  # Refresh to ensure we have latest data
 
     # Get POI content
     response = await async_client.get(
@@ -489,19 +492,20 @@ async def test_difficulty_adaptation(async_client, test_user, test_poi, test_con
     })
     token = response.json()["access_token"]
 
-    # Initial request with no progress
+    # Initial request with no progress should return base difficulty
     response = await async_client.get(
         f"/api/v1/map/pois/{test_poi.id}/content",
         params={"language": "ja", "proficiency_level": 50},
         headers={"Authorization": f"Bearer {token}"}
     )
     initial_difficulty = response.json()["data"]["difficulty_level"]
+    assert initial_difficulty == test_poi.difficulty  # Should be 45.0
 
-    # Create progress with high mastery
+    # Create progress with high mastery (should trigger adaptation)
     progress = UserProgress(
         user_id=test_user.id,
         language="ja",
-        region_id=test_poi.region_id,  # Use region_id instead of region
+        region_id=test_poi.region_id,
         proficiency_level=50,
         poi_progress={
             test_poi.id: {
@@ -512,13 +516,16 @@ async def test_difficulty_adaptation(async_client, test_user, test_poi, test_con
             }
         },
         content_mastery={
-            "vocabulary": {"vocab_1": 90},
-            "phrase": {"phrase_1": 85}
+            "vocabulary": {"vocab_1": 90},  # 90% mastery
+            "phrase": {"phrase_1": 85}      # 85% mastery
         },
         achievements=[]
     )
     test_db.add(progress)
+    flag_modified(progress, "poi_progress")
+    flag_modified(progress, "content_mastery")
     test_db.commit()
+    test_db.refresh(progress)
 
     # Get content after progress
     response = await async_client.get(
@@ -526,16 +533,22 @@ async def test_difficulty_adaptation(async_client, test_user, test_poi, test_con
         params={"language": "ja", "proficiency_level": 50},
         headers={"Authorization": f"Bearer {token}"}
     )
-    adapted_difficulty = response.json()["data"]["difficulty_level"]
+    data = response.json()["data"]
+    adapted_difficulty = data["difficulty_level"]
+    factors = data["local_context"]["difficulty_factors"]
 
-    # Verify difficulty increased but within limits
+    # Calculate expected difficulty
+    avg_mastery = (90 + 85) / 2  # Average of mastery scores
+    expected_mastery_factor = (avg_mastery / 100) * 0.3  # 30% max from mastery
+    expected_visit_factor = min((5 / 10) * 0.2, 0.2)  # 20% max from visits
+    expected_total_factor = min(expected_mastery_factor + expected_visit_factor, 0.2)  # Cap at 20% total
+    expected_difficulty = test_poi.difficulty * (1 + expected_total_factor)
+
+    # Verify difficulty increased appropriately
     assert adapted_difficulty > initial_difficulty
-    assert adapted_difficulty <= initial_difficulty * 1.5  # Max 50% increase
-
-    # Verify difficulty factors
-    factors = response.json()["data"]["local_context"]["difficulty_factors"]
-    assert factors["mastery_factor"] > 0  # Should have positive mastery impact
-    assert factors["visit_factor"] > 0  # Should have positive visit impact
+    assert adapted_difficulty == pytest.approx(expected_difficulty, rel=0.01)
+    assert factors["mastery_factor"] == pytest.approx(expected_mastery_factor, rel=0.01)
+    assert factors["visit_factor"] == pytest.approx(expected_visit_factor, rel=0.01)
 
 @pytest.mark.asyncio
 async def test_version_control(async_client, test_user, test_poi, test_content, test_db: Session):
