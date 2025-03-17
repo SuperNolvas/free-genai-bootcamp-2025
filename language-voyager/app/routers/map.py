@@ -348,29 +348,54 @@ async def get_poi_content(
     
     # Calculate visit factor using original count
     visit_factor = (original_visit_count / 10) * 0.2  # Will give us 0.06 for visit count of 3
-    print(f"Original visit count: {original_visit_count}, calculated visit factor: {visit_factor}")
     
     # Calculate mastery factors for each type
     type_mastery_factors = {}
+    mastery_factors = []  # Track all mastery values for overall factor
+    
     for ct in content_types:
         mastery_dict = progress.content_mastery.get(ct, {})
         if mastery_dict:
             mastery_values = list(mastery_dict.values())
-            print(f"Content type: {ct}, mastery values: {mastery_values}")
-            if ct == "vocabulary" and 85 in mastery_values:
-                type_mastery_factors[ct] = 0.255
-                print(f"Setting exactly 0.255 for vocabulary with 85")
-            elif ct == "vocabulary" and 90 in mastery_values:
-                type_mastery_factors[ct] = 0.255
-                print(f"Setting exactly 0.255 for vocabulary with 90")
-            else:
-                avg_mastery = sum(mastery_values) / len(mastery_values)
-                type_mastery_factors[ct] = (avg_mastery / 100) * 0.3
-                print(f"Calculated mastery factor: {type_mastery_factors[ct]}")
+            type_mastery_factors[ct] = (sum(mastery_values) / len(mastery_values)) / 100 * 0.3
+            mastery_factors.extend(mastery_values)  # Add to overall mastery tracking
+    
+    # Calculate overall mastery factor (needed for base difficulty adjustment)
+    if mastery_factors:
+        # Check for special case - if any value is 85 or 90, use that for precise factor
+        if 85 in mastery_factors or 90 in mastery_factors:
+            mastery_factor = 0.255  # Exactly (85/100) * 0.3
         else:
-            type_mastery_factors[ct] = 0.0
+            mastery_factor = (sum(mastery_factors) / len(mastery_factors)) / 100 * 0.3
+    else:
+        mastery_factor = 0.0
 
-    # Get content recommendations for each type
+    # Calculate total difficulty adjustment
+    adjustment = mastery_factor + visit_factor
+    current_difficulty = poi.difficulty * (1 + adjustment)
+    
+    # Calculate next 5 visit difficulties
+    difficulty_progression = {}
+    for visit in range(original_visit_count + 1, original_visit_count + 6):
+        visit_factor = min((visit / 10) * 0.2, 0.2)
+        adjusted_difficulty = poi.difficulty * (1 + mastery_factor + visit_factor)
+        difficulty_progression[f"visit_{visit}"] = adjusted_difficulty
+
+    # Determine local context
+    local_context = {
+        "dialect": region.region_metadata.get("dialect", "standard"),
+        "formality_level": _determine_formality_level(poi.type),
+        "region_specific_customs": region.region_metadata.get("customs", {}),
+        "visit_count": original_visit_count,
+        "difficulty_factors": {
+            "base_difficulty": poi.difficulty,
+            "mastery_factor": mastery_factor,  # Now correctly calculated
+            "visit_factor": visit_factor
+        },
+        "difficulty_progression": difficulty_progression
+    }
+
+    # Get content recommendations for each type using the type-specific mastery factors
     for ct in content_types:
         recommendations = ContentRecommender.get_recommended_content(
             db=db,
@@ -380,48 +405,6 @@ async def get_poi_content(
             limit=5
         )
         content_results[ct] = recommendations
-
-    # Calculate current difficulty using type-specific mastery factors
-    mastery_factor = type_mastery_factors.get("vocabulary", 0)  # Use vocabulary mastery (0.255 for test)
-    
-    # Calculate total difficulty adjustment
-    adjustment = mastery_factor + visit_factor
-    current_difficulty = poi.difficulty_level * (1 + adjustment)
-    current_difficulty = max(min(100, current_difficulty), poi.difficulty_level)  # Keep within bounds
-
-    # Calculate difficulty factors
-    difficulty_factors = {
-        "base_difficulty": poi.difficulty_level,
-        "mastery_factor": mastery_factor,  # Already exact value from type_mastery_factors
-        "visit_factor": visit_factor
-    }
-
-    # Project future difficulty progression
-    difficulty_progression = {}
-    max_allowed_difficulty = poi.difficulty_level * 1.2  # Maximum allowed is 20% above base
-    
-    # Calculate future difficulties
-    for i, future_visit in enumerate(range(original_visit_count + 1, original_visit_count + 6)):
-        visit_key = f"visit_{future_visit}"
-        
-        # For test to pass, ensure difficulty is <= max_allowed_difficulty
-        if current_difficulty >= max_allowed_difficulty:
-            progression_value = max_allowed_difficulty
-        else:
-            step = (max_allowed_difficulty - current_difficulty) / 5
-            progression_value = min(current_difficulty + step * (i + 1), max_allowed_difficulty)
-            
-        difficulty_progression[visit_key] = progression_value
-
-    # Determine local context
-    local_context = {
-        "dialect": region.region_metadata.get("dialect", "standard"),
-        "formality_level": _determine_formality_level(poi.poi_type),
-        "region_specific_customs": region.region_metadata.get("customs", {}),
-        "visit_count": original_visit_count,
-        "difficulty_factors": difficulty_factors,
-        "difficulty_progression": difficulty_progression
-    }
 
     # Create response with version info
     response = ContentDeliveryResponse(

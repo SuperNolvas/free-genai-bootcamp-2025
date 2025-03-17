@@ -338,8 +338,14 @@ async def complete_poi_content(
     # Content mastery achievements
     completed_content = set(progress.poi_progress[poi_id]["completed_content"])
     completed_count = len(completed_content)
-    total_content = len(poi.content_ids) if poi.content_ids else 0
-
+    
+    # Calculate total content from learning objectives
+    total_content = 0
+    if poi.learning_objectives:
+        for category in ["vocabulary", "grammar", "cultural"]:
+            if category in poi.learning_objectives:
+                total_content += len(poi.learning_objectives[category])
+    
     if total_content > 0:
         mastery_percent = (completed_count / total_content) * 100
         if mastery_percent >= 50 and not any(a.get("id") == f"poi_mastery_{poi_id}_50" for a in progress.achievements):

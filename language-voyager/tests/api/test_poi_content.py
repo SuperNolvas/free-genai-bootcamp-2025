@@ -42,13 +42,33 @@ def test_poi(test_db: Session, test_region: Region):
         id="tokyo_station",
         name="Tokyo Station",
         local_name="東京駅",
-        description="Historic railway station",
-        local_description="歴史的な鉄道駅",
-        poi_type="station",
-        coordinates={"lat": 35.681236, "lon": 139.767125},
+        type="station",
+        location={"lat": 35.681236, "lon": 139.767125},
         region_id=test_region.id,
-        difficulty_level=45,
-        content_ids=["vocab_1", "phrase_1", "dialogue_1"]
+        difficulty=45,
+        content={
+            "en": {
+                "title": "Tokyo Station",
+                "description": "Historic railway station",
+                "hints": ["Look for the red brick building", "Main entrance faces Marunouchi"]
+            },
+            "ja": {
+                "title": "東京駅",
+                "description": "歴史的な鉄道駅",
+                "hints": ["赤レンガの建物を探してください", "丸の内側に正面玄関があります"]
+            }
+        },
+        achievement_criteria={
+            "type": "visit",
+            "requirements": {}
+        },
+        points_value=10,
+        time_estimate=30,
+        learning_objectives={
+            "vocabulary": ["駅", "電車", "新幹線"],
+            "grammar": ["～はどこですか"],
+            "cultural": ["Train station etiquette"]
+        }
     )
     
     existing = test_db.query(PointOfInterest).filter(PointOfInterest.id == poi.id).first()
@@ -158,7 +178,7 @@ async def test_get_poi_content(async_client, test_user, test_poi, test_content, 
     assert len(data["phrases"]) == 1
     assert len(data["dialogues"]) == 1
     assert data["local_context"]["dialect"] == "tokyo"
-    assert data["difficulty_level"] == test_poi.difficulty_level
+    assert data["difficulty_level"] == test_poi.difficulty  # Update to use correct field name
 
 @pytest.mark.asyncio
 async def test_complete_poi_content(async_client, test_user, test_poi, test_content, test_db: Session):
@@ -173,28 +193,25 @@ async def test_complete_poi_content(async_client, test_user, test_poi, test_cont
     # Make sure POI is attached to session
     test_poi = test_db.merge(test_poi)
     
-    # Create initial progress
-    progress = UserProgress(
-        user_id=test_user.id,
-        language="ja",
-        region=test_poi.region_id,
-        proficiency_level=0,
-        poi_progress={},
-        content_mastery={},
-        achievements=[]
-    )
-    
-    existing_progress = test_db.query(UserProgress).filter(
+    # Get or create initial progress
+    progress = test_db.query(UserProgress).filter(
         UserProgress.user_id == test_user.id,
-        UserProgress.region == test_poi.region_id
+        UserProgress.region_id == test_poi.region_id
     ).first()
     
-    if not existing_progress:
+    if not progress:
+        progress = UserProgress(
+            user_id=test_user.id,
+            language="ja",
+            region_id=test_poi.region_id,  # Use region_id instead of region
+            proficiency_level=0,
+            poi_progress={},
+            content_mastery={},
+            achievements=[]
+        )
         test_db.add(progress)
         test_db.commit()
         test_db.refresh(progress)
-    else:
-        progress = existing_progress
     
     # Complete POI content - Update endpoint URL to match router
     response = await async_client.post(
@@ -235,14 +252,14 @@ async def test_achievement_unlocking(async_client, test_user, test_poi, test_con
     # Get or create progress record
     progress = test_db.query(UserProgress).filter(
         UserProgress.user_id == test_user.id,
-        UserProgress.region == test_poi.region_id
+        UserProgress.region_id == test_poi.region_id
     ).first()
     
     if not progress:
         progress = UserProgress(
             user_id=test_user.id,
             language="ja",
-            region=test_poi.region_id,
+            region_id=test_poi.region_id,  # Use region_id instead of region
             proficiency_level=0,
             poi_progress={},
             content_mastery={},
@@ -270,7 +287,7 @@ async def test_achievement_unlocking(async_client, test_user, test_poi, test_con
     # Verify initial state
     progress = test_db.query(UserProgress).filter(
         UserProgress.user_id == test_user.id,
-        UserProgress.region == test_poi.region_id
+        UserProgress.region_id == test_poi.region_id  # Changed from region to region_id
     ).first()
     assert progress.poi_progress[test_poi.id]["visits"] == 4
     
@@ -314,7 +331,7 @@ async def test_content_difficulty_progression(async_client, test_user, test_poi,
     progress = UserProgress(
         user_id=test_user.id,
         language="ja",
-        region=test_poi.region_id,
+        region_id=test_poi.region_id,  # Use region_id instead of region
         proficiency_level=50,
         poi_progress={
             test_poi.id: {
@@ -354,7 +371,7 @@ async def test_content_difficulty_progression(async_client, test_user, test_poi,
     assert "visit_factor" in factors
     
     # Verify base difficulty matches POI
-    assert factors["base_difficulty"] == test_poi.difficulty_level
+    assert factors["base_difficulty"] == test_poi.difficulty  # Update to use correct field name
     
     # Verify mastery factor (30% max increase)
     mastery_factor = factors["mastery_factor"]
@@ -371,7 +388,7 @@ async def test_content_difficulty_progression(async_client, test_user, test_poi,
     assert len(progression) == 5  # Next 5 visits
     
     # Verify progression increases with visits but stays within bounds
-    base_difficulty = test_poi.difficulty_level
+    base_difficulty = test_poi.difficulty
     previous = None
     for visit_num in range(4, 9):  # Visits 4-8
         visit_key = f"visit_{visit_num}"
@@ -401,11 +418,11 @@ async def test_content_recommendation(async_client, test_user, test_poi, test_co
     progress = UserProgress(
         user_id=test_user.id,
         language="ja",
-        region=test_poi.region_id,
+        region_id=test_poi.region_id,  # Fix: Use region_id instead of region
         proficiency_level=50,
         poi_progress={
             test_poi.id: {
-                "visits": 2,
+                "visits": 2,  
                 "completed_content": ["vocab_1"],
                 "total_time": 600,
                 "last_visit": str(datetime.utcnow())
@@ -469,7 +486,7 @@ async def test_difficulty_adaptation(async_client, test_user, test_poi, test_con
     progress = UserProgress(
         user_id=test_user.id,
         language="ja",
-        region=test_poi.region_id,
+        region_id=test_poi.region_id,  # Use region_id instead of region
         proficiency_level=50,
         poi_progress={
             test_poi.id: {
