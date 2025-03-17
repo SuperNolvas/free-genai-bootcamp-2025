@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState } from 'react';
-import { useLocation } from 'react-router-dom';
 
 interface NavigationContextType {
   breadcrumbs: { name: string; path: string }[];
@@ -10,7 +9,6 @@ const NavigationContext = createContext<NavigationContextType | undefined>(undef
 
 export function NavigationProvider({ children }: { children: React.ReactNode }) {
   const [breadcrumbs, setBreadcrumbs] = useState<{ name: string; path: string }[]>([]);
-  const location = useLocation();
 
   return (
     <NavigationContext.Provider value={{ breadcrumbs, setBreadcrumbs }}>

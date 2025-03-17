@@ -1,5 +1,5 @@
 import * as React from "react"
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useState } from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
@@ -115,12 +115,16 @@ export function SidebarTrigger({
   children,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  const { setIsOpen } = useSidebar()
+  const { isOpen, setIsOpen } = useSidebar()
+
+  const handleClick = () => {
+    setIsOpen(!isOpen)
+  }
 
   return (
     <button
       type="button"
-      onClick={() => setIsOpen((prev) => !prev)}
+      onClick={handleClick}
       className={cn(
         "inline-flex h-10 w-10 items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         className

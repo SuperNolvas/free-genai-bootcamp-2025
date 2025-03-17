@@ -50,18 +50,24 @@ const BreadcrumbItem = React.forwardRef<
 })
 BreadcrumbItem.displayName = "BreadcrumbItem"
 
-const BreadcrumbLink = React.forwardRef<
-  HTMLAnchorElement,
-  React.AnchorHTMLAttributes<HTMLAnchorElement>
->(({ className, ...props }, ref) => {
-  return (
-    <a
-      ref={ref}
-      className={cn("hover:text-foreground", className)}
-      {...props}
-    />
-  )
-})
+interface BreadcrumbLinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
+  as?: React.ElementType
+  to?: string
+}
+
+const BreadcrumbLink = React.forwardRef<HTMLAnchorElement, BreadcrumbLinkProps>(
+  ({ as: Comp = "a", className, to, ...props }, ref) => {
+    const Component = Comp as any
+    return (
+      <Component
+        ref={ref}
+        to={to}
+        className={cn("hover:text-foreground", className)}
+        {...props}
+      />
+    )
+  }
+)
 BreadcrumbLink.displayName = "BreadcrumbLink"
 
 const BreadcrumbPage = React.forwardRef<

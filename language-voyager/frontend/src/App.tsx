@@ -1,20 +1,17 @@
 import React from 'react';
-import logo from './logo.svg';
-import './App.css';
 import { useLocation } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { store } from './store/store';
-import { ThemeProvider } from "@/components/theme-provider"
-import { BrowserRouter as Router } from 'react-router-dom'
-import AppSidebar from '@/components/Sidebar'
-import Breadcrumbs from '@/components/Breadcrumbs'
-import AppRouter from '@/components/AppRouter'
-import { NavigationProvider } from '@/context/NavigationContext'
-
+import { ThemeProvider } from './components/theme-provider';
+import { BrowserRouter as Router } from 'react-router-dom';
+import AppSidebar from './components/Sidebar';
+import Breadcrumbs from './components/Breadcrumbs';
+import AppRouter from './components/AppRouter';
+import { NavigationProvider } from './context/NavigationContext';
 import {
   SidebarInset,
   SidebarProvider
-} from "@/components/ui/sidebar"
+} from './components/ui/sidebar';
 
 function AppContent() {
   const location = useLocation();

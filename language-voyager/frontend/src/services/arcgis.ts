@@ -1,22 +1,30 @@
-import Map from '@arcgis/core/Map';
+import ArcGISMap from '@arcgis/core/Map';
 import MapView from '@arcgis/core/views/MapView';
 import Graphic from '@arcgis/core/Graphic';
 import Point from '@arcgis/core/geometry/Point';
 import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol';
 import Polygon from '@arcgis/core/geometry/Polygon';
 import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol';
-import { POI, Region } from '../types/api';
+import { POI } from '../types/api';
 import { store } from '../store/store';
 
-class ArcGISService {
-  private map: Map | null = null;
+interface Region {
+  id: string;
+  name: string;
+  center_lat: number;
+  center_lon: number;
+  // Add other region properties as needed
+}
+
+export class ArcGISMapService {
+  private map: ArcGISMap | null = null;
   private view: MapView | null = null;
   private locationMarker: Graphic | null = null;
-  private poiMarkers: Map<string, Graphic> = new Map();
-  private regionPolygons: Map<string, Graphic> = new Map();
+  private poiMarkers = new Map<string, Graphic>();
+  private regionPolygons = new Map<string, Graphic>();
 
   async initialize(container: HTMLDivElement) {
-    this.map = new Map({
+    this.map = new ArcGISMap({
       basemap: 'streets-vector'
     });
 
@@ -55,21 +63,33 @@ class ArcGISService {
     return this.view;
   }
 
-  updateLocation(latitude: number, longitude: number) {
-    if (!this.locationMarker) return;
-
+  updateLocation(lat: number, lon: number) {
     const point = new Point({
-      longitude,
-      latitude,
-      spatialReference: { wkid: 4326 }
+      latitude: lat,
+      longitude: lon
     });
 
-    this.locationMarker.geometry = point;
+    const symbol = new SimpleMarkerSymbol({
+      color: [0, 119, 255],
+      outline: {
+        color: [255, 255, 255],
+        width: 2
+      }
+    });
 
-    // Center map on new location
+    if (this.locationMarker) {
+      this.locationMarker.geometry = point;
+    } else {
+      this.locationMarker = new Graphic({
+        geometry: point,
+        symbol
+      });
+      this.view?.graphics.add(this.locationMarker);
+    }
+
     this.view?.goTo({
       target: point,
-      zoom: this.view.zoom
+      zoom: 15
     });
   }
 
@@ -119,43 +139,42 @@ class ArcGISService {
     this.poiMarkers.set(poi.id, graphic);
   }
 
-  addRegion(region: Region) {
-    if (!this.map || !this.view) return;
+  addRegionPolygon(region: Region) {
+    if (!this.view) return;
 
-    // Convert region bounds to polygon (simplified for example)
-    // In real implementation, region should include proper boundary coordinates
-    const polygon = new Polygon({
+    const polygonGeometry = {
+      type: "polygon" as const,
       rings: [
-        // Example polygon - should be replaced with actual region boundaries
-        [region.center_lon - 0.1, region.center_lat - 0.1],
-        [region.center_lon + 0.1, region.center_lat - 0.1],
-        [region.center_lon + 0.1, region.center_lat + 0.1],
-        [region.center_lon - 0.1, region.center_lat + 0.1],
-        [region.center_lon - 0.1, region.center_lat - 0.1]
+        [
+          [region.center_lon - 0.1, region.center_lat - 0.1],
+          [region.center_lon + 0.1, region.center_lat - 0.1],
+          [region.center_lon + 0.1, region.center_lat + 0.1],
+          [region.center_lon - 0.1, region.center_lat + 0.1],
+          [region.center_lon - 0.1, region.center_lat - 0.1]
+        ]
       ],
       spatialReference: { wkid: 4326 }
-    });
+    };
 
     const symbol = new SimpleFillSymbol({
-      color: [76, 175, 80, 0.2],
+      color: [51, 51, 204, 0.2],
       outline: {
-        color: '#4caf50',
-        width: 2
+        color: [51, 51, 204],
+        width: 1
       }
     });
 
     const graphic = new Graphic({
-      geometry: polygon,
+      geometry: polygonGeometry,
       symbol,
       attributes: {
         id: region.id,
-        name: region.name,
-        language: region.language
+        name: region.name
       }
     });
 
-    this.view.graphics.add(graphic);
     this.regionPolygons.set(region.id, graphic);
+    this.view.graphics.add(graphic);
   }
 
   removePOI(poiId: string) {
@@ -194,5 +213,5 @@ class ArcGISService {
   }
 }
 
-export const arcgisService = new ArcGISService();
+export const arcgisService = new ArcGISMapService();
 export default arcgisService;
