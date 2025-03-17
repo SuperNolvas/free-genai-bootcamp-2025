@@ -1,92 +1,35 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
-import LoginForm from '@/components/auth/LoginForm';
-import RegisterForm from '@/components/auth/RegisterForm';
-import ProtectedRoute from '@/components/auth/ProtectedRoute';
+import React from 'react'
+import { Routes, Route, Navigate } from 'react-router-dom'
 
-import Dashboard from '@/pages/Dashboard';
-import StudyActivities from '@/pages/StudyActivities';
-import StudyActivityShow from '@/pages/StudyActivityShow';
-import StudyActivityLaunch from '@/pages/StudyActivityLaunch';
-import Words from '@/pages/Words';
-import WordShow from '@/pages/WordShow';
-import Groups from '@/pages/Groups';
-import GroupShow from '@/pages/GroupShow';
-import Sessions from '@/pages/Sessions';
-import StudySessionShow from '@/pages/StudySessionShow';
-import Settings from '@/pages/Settings';
+const Map = React.lazy(() => import('@/pages/Map'))
+const Lessons = React.lazy(() => import('@/pages/Lessons'))
+const Achievements = React.lazy(() => import('@/pages/Achievements'))
+const Settings = React.lazy(() => import('@/pages/Settings'))
+const Login = React.lazy(() => import('@/pages/auth/Login'))
+const Register = React.lazy(() => import('@/pages/auth/Register'))
 
-export default function AppRouter() {
+const AppRouter = () => {
   return (
-    <div className="min-h-screen">
-      <main className="container mx-auto px-4 py-8">
-        <Routes>
-          {/* Auth routes */}
-          <Route path="/auth/login" element={<LoginForm />} />
-          <Route path="/auth/register" element={<RegisterForm />} />
-          
-          {/* Protected routes */}
-          <Route path="/" element={
-            <ProtectedRoute>
-              <Navigate to="/dashboard" replace />
-            </ProtectedRoute>
-          } />
-          <Route path="/dashboard" element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/study-activities" element={
-            <ProtectedRoute>
-              <StudyActivities />
-            </ProtectedRoute>
-          } />
-          <Route path="/study-activities/:id" element={
-            <ProtectedRoute>
-              <StudyActivityShow />
-            </ProtectedRoute>
-          } />
-          <Route path="/study-activities/:id/launch" element={
-            <ProtectedRoute>
-              <StudyActivityLaunch />
-            </ProtectedRoute>
-          } />
-          <Route path="/words" element={
-            <ProtectedRoute>
-              <Words />
-            </ProtectedRoute>
-          } />
-          <Route path="/words/:id" element={
-            <ProtectedRoute>
-              <WordShow />
-            </ProtectedRoute>
-          } />
-          <Route path="/groups" element={
-            <ProtectedRoute>
-              <Groups />
-            </ProtectedRoute>
-          } />
-          <Route path="/groups/:id" element={
-            <ProtectedRoute>
-              <GroupShow />
-            </ProtectedRoute>
-          } />
-          <Route path="/sessions" element={
-            <ProtectedRoute>
-              <Sessions />
-            </ProtectedRoute>
-          } />
-          <Route path="/sessions/:id" element={
-            <ProtectedRoute>
-              <StudySessionShow />
-            </ProtectedRoute>
-          } />
-          <Route path="/settings" element={
-            <ProtectedRoute>
-              <Settings />
-            </ProtectedRoute>
-          } />
-        </Routes>
-      </main>
-    </div>
-  );
+    <React.Suspense fallback={<div>Loading...</div>}>
+      <Routes>
+        {/* Auth Routes */}
+        <Route path="/auth">
+          <Route path="login" element={<Login />} />
+          <Route path="register" element={<Register />} />
+        </Route>
+
+        {/* App Routes */}
+        <Route path="/" element={<Navigate to="/map" replace />} />
+        <Route path="/map" element={<Map />} />
+        <Route path="/lessons" element={<Lessons />} />
+        <Route path="/achievements" element={<Achievements />} />
+        <Route path="/settings" element={<Settings />} />
+
+        {/* Catch all route */}
+        <Route path="*" element={<Navigate to="/map" replace />} />
+      </Routes>
+    </React.Suspense>
+  )
 }
+
+export default AppRouter

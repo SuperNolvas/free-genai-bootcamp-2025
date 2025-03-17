@@ -1,84 +1,68 @@
-import * as React from "react"
-import { useLocation, Link } from "react-router-dom"
-import { WholeWord, Group, Home, Hourglass, BookOpenText, Settings, LogOut } from "lucide-react"
-import { useAuth } from '@/hooks/useAuth'
-
+import React from 'react'
+import { useNavigate } from 'react-router-dom'
+import { MapPin, Book, Award, Settings, Menu } from 'lucide-react'
 import {
   Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarRail,
+  SidebarContent,
   SidebarFooter,
-} from "@/components/ui/sidebar"
+  SidebarTrigger
+} from './ui/sidebar'
 
-const navItems = [
-  { icon: Home, name: 'Dashboard', path: '/dashboard' },
-  { icon: BookOpenText, name: 'Study Activities', path: '/study-activities' },
-  { icon: WholeWord, name: 'Words', path: '/words' },
-  { icon: Group, name: 'Word Groups', path: '/groups' },
-  { icon: Hourglass, name: 'Sessions', path: '/sessions' },
-  { icon: Settings, name: 'Settings', path: '/settings' },
-]
-
-export default function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const location = useLocation()
-  const { isAuthenticated, logout, user } = useAuth()
-  
-  const isActive = (path: string) => {
-    if (path === '/dashboard' && location.pathname === '/') return true
-    return location.pathname.startsWith(path)
-  }
-  
-  if (!isAuthenticated) return null
+const AppSidebar = () => {
+  const navigate = useNavigate()
 
   return (
-    <Sidebar {...props}>
-      <SidebarHeader>
-        LangVoyager
-        {user && (
-          <div className="text-sm text-gray-500 mt-1">
-            {user.username}
-          </div>
-        )}
-      </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems.map((item) => (
-                <SidebarMenuItem key={item.name}>
-                  <SidebarMenuButton asChild isActive={isActive(item.path)}>
-                    <Link to={item.path}>
-                      <item.icon />
-                      <span>{item.name}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-      <SidebarFooter>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton onClick={logout}>
-                  <LogOut />
-                  <span>Logout</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarFooter>
-      <SidebarRail />
-    </Sidebar>
+    <>
+      <SidebarTrigger className="fixed left-4 top-4 lg:hidden">
+        <Menu className="h-6 w-6" />
+      </SidebarTrigger>
+      
+      <Sidebar className="border-r bg-background">
+        <SidebarHeader>
+          <h2 className="text-lg font-semibold">Language Voyager</h2>
+        </SidebarHeader>
+
+        <SidebarContent>
+          <nav className="space-y-2">
+            <button
+              onClick={() => navigate('/map')}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <MapPin className="h-5 w-5" />
+              <span>Map</span>
+            </button>
+            
+            <button
+              onClick={() => navigate('/lessons')}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <Book className="h-5 w-5" />
+              <span>Lessons</span>
+            </button>
+            
+            <button
+              onClick={() => navigate('/achievements')}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <Award className="h-5 w-5" />
+              <span>Achievements</span>
+            </button>
+          </nav>
+        </SidebarContent>
+
+        <SidebarFooter>
+          <button
+            onClick={() => navigate('/settings')}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            <Settings className="h-5 w-5" />
+            <span>Settings</span>
+          </button>
+        </SidebarFooter>
+      </Sidebar>
+    </>
   )
 }
+
+export default AppSidebar
