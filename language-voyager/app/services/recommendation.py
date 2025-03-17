@@ -15,17 +15,17 @@ class ContentRecommender:
         # Calculate mastery factor (max 30% increase)
         mastery_factor = (mastery_level / 100) * 0.3
         
-        # Calculate visit factor (max 20% increase)
+        # Calculate visit factor (max 20% increase) 
         visit_factor = min((visit_count / 10) * 0.2, 0.2)
         
-        # Calculate total adjustment - cap at 20% increase to stay within test bounds
-        total_adjustment = min(mastery_factor + visit_factor, 0.2)
+        # Apply both adjustments independently
+        total_adjustment = mastery_factor + visit_factor
         
-        # Apply adjustment to base difficulty
+        # Calculate adjusted difficulty with total adjustment
         adjusted_difficulty = base_difficulty * (1 + total_adjustment)
         
-        # Keep within 0-100 range and ensure some progression
-        return min(max(adjusted_difficulty, base_difficulty + 0.1), 100)
+        # Keep within reasonable bounds (0-100)
+        return min(max(adjusted_difficulty, 0), 100)
         
     @staticmethod
     def get_recommended_content(
@@ -38,34 +38,50 @@ class ContentRecommender:
     ) -> List[Dict]:
         """Get recommended content for a user based on their progress and POI context"""
         logger.info(f"Getting content recommendations for POI {poi.id}, type {content_type}")
-
-        # Get POI-specific progress and completed content
-        poi_progress = user_progress.poi_progress.get(poi.id, {})
+        
+        # Ensure user_progress.poi_progress is initialized
+        poi_progress = {}
+        if hasattr(user_progress, 'poi_progress') and user_progress.poi_progress:
+            # Access POI-specific progress data
+            poi_progress = user_progress.poi_progress.get(poi.id, {})
+        
+        # Get completed content
         completed_items = set(poi_progress.get("completed_content", []))
         if completed_content:
             completed_items.update(completed_content)
-
-        # Get mastery info directly from user_progress
-        type_mastery = {}
-        if content_type:
-            # Try different variations of the content type key
-            possible_keys = [
-                content_type,
-                str(content_type).lower(),
-                str(content_type).upper(),
-                "vocabulary" if str(content_type).upper() == "VOCABULARY" else None
-            ]
-            possible_keys = [k for k in possible_keys if k]
             
-            for key in possible_keys:
-                if key in user_progress.content_mastery:
-                    type_mastery = user_progress.content_mastery[key]
-                    break
-
+        # Get mastery info from content_mastery
+        type_mastery = {}
+        
+        # Ensure content_mastery is initialized
+        if hasattr(user_progress, 'content_mastery') and user_progress.content_mastery:
+            if content_type:
+                # Try different variations of the content type key
+                content_type_str = str(content_type)
+                possible_keys = [
+                    content_type_str,
+                    content_type_str.lower(),
+                    content_type_str.upper(),
+                    "vocabulary" if content_type_str.upper() == "VOCABULARY" else None
+                ]
+                possible_keys = [k for k in possible_keys if k]
+                
+                for key in possible_keys:
+                    if key in user_progress.content_mastery:
+                        type_mastery = user_progress.content_mastery[key]
+                        break
+            
+            # Also look for any mastery data that might contain our content IDs
+            # This handles the case where content_type might be an enum but stored as a string
+            if not type_mastery:
+                for key, value in user_progress.content_mastery.items():
+                    if isinstance(value, dict):
+                        type_mastery.update(value)
+        
         logger.info(f"POI progress for {poi.id}: {poi_progress}")
         logger.info(f"Completed items from progress: {completed_items}")
         logger.info(f"Content mastery: {type_mastery}")
-
+        
         # Query base content
         query = db.query(LanguageContent).filter(
             LanguageContent.region == poi.region_id
@@ -73,7 +89,7 @@ class ContentRecommender:
         
         if user_progress.language:
             query = query.filter(LanguageContent.language == user_progress.language)
-
+            
         # Filter by content type if specified
         if content_type:
             if isinstance(content_type, str):
@@ -84,12 +100,12 @@ class ContentRecommender:
                     logger.warning(f"Invalid content type: {content_type}")
             else:
                 query = query.filter(LanguageContent.content_type == content_type)
-
+                
         # Get matching content
         content_items = query.all()
         logger.info(f"Found {len(content_items)} content items")
-
         recommendations = []
+        
         for content in content_items:
             # Check if content is completed (in completed_items OR has mastery)
             is_completed = (
@@ -105,12 +121,12 @@ class ContentRecommender:
             logger.info(f"- In type_mastery: {content.id in type_mastery}")
             logger.info(f"- Final completed status: {is_completed}")
             logger.info(f"- Mastery level: {mastery_level}")
-
+            
             # Calculate recommendation score
             difficulty_match = 1.0  # Default to perfect match for now
             context_match = 1.0 if poi.type in content.context_tags else 0.5
             match_score = difficulty_match * context_match * 100
-
+            
             content_dict = {
                 "id": content.id,
                 "content": content.content,
@@ -118,12 +134,12 @@ class ContentRecommender:
                 "completed": is_completed,  # This should now be correct
                 "mastery_level": mastery_level
             }
-
+            
             recommendations.append({
                 "content": content_dict,
                 "match_score": match_score
             })
-
+            
         # Sort by match score
         recommendations.sort(key=lambda x: x["match_score"], reverse=True)
         return [r["content"] for r in recommendations[:limit]]

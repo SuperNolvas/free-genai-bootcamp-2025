@@ -308,17 +308,27 @@ async def get_poi_content(
         )
 
     # Get or initialize user progress
+    logger.info(f"Looking for progress with user_id={current_user.id}, language={language}, region_id={poi.region_id}")
+    all_user_progress = db.query(UserProgress).filter(
+        UserProgress.user_id == current_user.id
+    ).all()
+    logger.info(f"Found {len(all_user_progress)} total progress records for user {current_user.id}")
+    for p in all_user_progress:
+        logger.info(f"Progress: user_id={p.user_id}, language={p.language}, region_id={p.region_id}, region_name={p.region_name}")
+        
     progress = db.query(UserProgress).filter(
         UserProgress.user_id == current_user.id,
         UserProgress.language == language,
-        (UserProgress.region_id == poi.region_id) | (UserProgress.region_name == poi.region_id)  # Try both fields
+        UserProgress.region_id == poi.region_id  # Only use region_id for consistency
     ).first()
 
     if not progress:
+        logger.info(f"No progress found, creating new record")
         progress = UserProgress(
             user_id=current_user.id,
             language=language,
             region_id=poi.region_id,  # Use region_id consistently
+            region_name=poi.region_id,  # Set for backward compatibility
             proficiency_level=proficiency_level,
             poi_progress={},
             content_mastery={},
@@ -326,7 +336,13 @@ async def get_poi_content(
         )
         db.add(progress)
         db.commit()
-        db.refresh(progress)  # Fixed: Use db instead of test_db
+        db.refresh(progress)  # Ensure we have the latest data
+    else:
+        logger.info(f"Found progress with POI progress: {progress.poi_progress}, content mastery: {progress.content_mastery}")
+        if progress.poi_progress and poi.id in progress.poi_progress:
+            logger.info(f"POI progress for {poi.id}: {progress.poi_progress[poi.id]}")
+        flag_modified(progress, "poi_progress")  # Mark JSON fields as modified to ensure SQLAlchemy tracks changes
+        flag_modified(progress, "content_mastery")
 
     # Get current POI progress
     poi_progress = progress.poi_progress.get(poi_id, {})
@@ -389,15 +405,6 @@ async def get_poi_content(
             completed_content=completed_items
         )
         content_results[ct] = recommendations
-
-    # Calculate difficulty progression with bounded increases
-    difficulty_progression = {}
-    base = poi.difficulty
-    for visit in range(poi_visits + 1, poi_visits + 6):
-        next_visit_factor = min((visit / 10) * 0.2, 0.2)
-        next_adjustment = min(mastery_factor + visit_factor, 0.2)  # Cap at 20%
-        next_difficulty = base * (1 + next_adjustment)
-        difficulty_progression[f"visit_{visit}"] = next_difficulty
 
     # Include difficulty factors in response
     difficulty_factors = {
