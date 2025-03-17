@@ -15,7 +15,7 @@ Players navigate a detailed ArcGIS map of their target language's country (e.g.,
 
 ```mermaid
 flowchart TD
-    User(User) <--> Frontend[Gradio Frontend]
+    User(User) <--> Frontend[React Frontend]
     Frontend <--> Backend[FastAPI Backend]
     Backend <--> VectorDB[(Vector Database)]
     Backend <--> OpenRouter[OpenRouter API]
@@ -46,7 +46,7 @@ flowchart TD
 
 ## Technical Stack Details
 
-1. **Frontend: Gradio**
+1. **Frontend: React**
     - Interactive UI with map visualization and chat interface
     - WebGL support for smooth map rendering
     - Responsive design for desktop/mobile play
