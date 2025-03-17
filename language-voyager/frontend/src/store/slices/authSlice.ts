@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { AuthResponse, LoginRequest, RegisterRequest, UserProfile } from '../../types/api';
+import api from '../../services/api';
 
 interface AuthState {
   token: string | null;
@@ -18,22 +19,19 @@ const initialState: AuthState = {
 export const login = createAsyncThunk(
   'auth/login',
   async (credentials: LoginRequest) => {
-    const response = await fetch('http://localhost:8000/auth/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
+    const response = await api.post<AuthResponse>('/auth/token', 
+      new URLSearchParams({
         username: credentials.username,
         password: credentials.password,
       }),
-    });
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      }
+    );
     
-    if (!response.ok) {
-      throw new Error('Login failed');
-    }
-    
-    const data: AuthResponse = await response.json();
+    const data = response.data;
     localStorage.setItem('token', data.access_token);
     return data;
   }
@@ -42,37 +40,16 @@ export const login = createAsyncThunk(
 export const register = createAsyncThunk(
   'auth/register',
   async (userData: RegisterRequest) => {
-    const response = await fetch('http://localhost:8000/auth/register', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(userData),
-    });
-    
-    if (!response.ok) {
-      throw new Error('Registration failed');
-    }
-    
-    return await response.json();
+    const response = await api.post<AuthResponse>('/auth/register', userData);
+    return response.data;
   }
 );
 
 export const fetchUserProfile = createAsyncThunk(
   'auth/fetchUserProfile',
-  async (_, { getState }) => {
-    const state = getState() as { auth: AuthState };
-    const response = await fetch('http://localhost:8000/auth/me', {
-      headers: {
-        'Authorization': `Bearer ${state.auth.token}`,
-      },
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch user profile');
-    }
-    
-    return await response.json();
+  async () => {
+    const response = await api.get<UserProfile>('/auth/me');
+    return response.data;
   }
 );
 
