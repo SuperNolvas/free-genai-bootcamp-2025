@@ -7,6 +7,20 @@ from app.models.region import Region
 from app.models.content import LanguageContent, ContentType
 from app.models.progress import UserProgress
 
+@pytest.fixture(autouse=True)
+def clean_user_progress(test_db: Session):
+    """Clean up user progress before and after each test"""
+    # Clean before test
+    test_db.query(UserProgress).delete()
+    test_db.commit()
+    
+    yield
+    
+    # Clean after test
+    test_db.query(UserProgress).delete()
+    test_db.commit()
+    test_db.expire_all()  # Clear SQLAlchemy's identity map
+
 @pytest.fixture
 def test_region(test_db: Session):
     region = Region(
@@ -326,12 +340,12 @@ async def test_content_difficulty_progression(async_client, test_user, test_poi,
         "password": "testpass123"
     })
     token = response.json()["access_token"]
-    
-    # Create progress with visits=3 to test exact visit factor calculation
+
+    # Create progress with exact values to test mastery factor calculation 
     progress = UserProgress(
         user_id=test_user.id,
         language="ja",
-        region_id=test_poi.region_id,  # Use region_id instead of region
+        region_name=test_poi.region_id,  # Use region_name instead of region_id
         proficiency_level=50,
         poi_progress={
             test_poi.id: {
@@ -342,19 +356,20 @@ async def test_content_difficulty_progression(async_client, test_user, test_poi,
             }
         },
         content_mastery={
-            "vocabulary": {"vocab_1": 85}
+            "vocabulary": {"vocab_1": 85}  # This should give us exactly 0.255 mastery factor
         },
         achievements=[]
     )
     test_db.add(progress)
     test_db.commit()
-    
+    test_db.refresh(progress)
+
     # Clear any existing progress to ensure clean state
     test_db.query(UserProgress).filter(
         UserProgress.user_id != test_user.id
     ).delete()
     test_db.commit()
-    
+
     # Get POI content to check difficulty progression
     response = await async_client.get(
         f"/api/v1/map/pois/{test_poi.id}/content",
@@ -363,21 +378,21 @@ async def test_content_difficulty_progression(async_client, test_user, test_poi,
     )
     assert response.status_code == 200
     data = response.json()["data"]
-    
-    # Verify difficulty factors
+
+    # Verify difficulty factors are present
     factors = data["local_context"]["difficulty_factors"]
     assert "base_difficulty" in factors
     assert "mastery_factor" in factors
     assert "visit_factor" in factors
-    
+
     # Verify base difficulty matches POI
-    assert factors["base_difficulty"] == test_poi.difficulty  # Update to use correct field name
-    
+    assert factors["base_difficulty"] == test_poi.difficulty
+
     # Verify mastery factor (30% max increase)
     mastery_factor = factors["mastery_factor"]
     assert 0 <= mastery_factor <= 0.3
     assert mastery_factor == pytest.approx((85/100) * 0.3, rel=0.01)
-    
+
     # Verify visit factor (20% max increase)
     visit_factor = factors["visit_factor"]
     assert 0 <= visit_factor <= 0.2
