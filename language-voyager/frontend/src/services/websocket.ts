@@ -7,6 +7,7 @@ class WebSocketService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectTimeout = 1000; // Start with 1 second
+  private watchId: number | null = null;
 
   connect() {
     const token = store.getState().auth.token;
@@ -22,12 +23,6 @@ class WebSocketService {
       store.dispatch(setWebSocketConnected(true));
       this.reconnectAttempts = 0;
       this.reconnectTimeout = 1000;
-      
-      // Send authentication immediately after connection
-      this.ws?.send(JSON.stringify({
-        type: 'authentication',
-        token
-      }));
     };
 
     this.ws.onmessage = (event) => {
@@ -35,14 +30,18 @@ class WebSocketService {
         const data = JSON.parse(event.data);
         
         switch (data.type) {
+          case 'geolocation_init':
+            // Start watching position with received config
+            this.startTracking(data.config);
+            break;
           case 'location_update':
             store.dispatch(setCurrentLocation(data as LocationUpdate));
             break;
-          case 'geolocation_error':
-            console.error('Geolocation error:', data.message);
-            break;
           case 'get_position':
             this.sendCurrentPosition();
+            break;
+          case 'error':
+            console.error('Server error:', data.message);
             break;
           default:
             console.log('Received message:', data);
@@ -55,6 +54,7 @@ class WebSocketService {
     this.ws.onclose = () => {
       console.log('WebSocket disconnected');
       store.dispatch(setWebSocketConnected(false));
+      this.stopTracking();
       this.attemptReconnect();
     };
 
@@ -76,18 +76,57 @@ class WebSocketService {
   }
 
   disconnect() {
+    this.stopTracking();
     if (this.ws) {
       this.ws.close();
       this.ws = null;
     }
   }
 
-  updateConfig(config: Partial<LocationConfig>) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({
-        type: 'config_update',
-        data: { config }
-      }));
+  private startTracking(config: LocationConfig) {
+    this.stopTracking(); // Clean up any existing watch
+
+    if ('geolocation' in navigator) {
+      this.watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+              type: 'position_update',
+              position: {
+                coords: {
+                  latitude: position.coords.latitude,
+                  longitude: position.coords.longitude,
+                  accuracy: position.coords.accuracy
+                },
+                timestamp: position.timestamp
+              }
+            }));
+          }
+        },
+        (error) => {
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+              type: 'geolocation_error',
+              error: {
+                code: error.code,
+                message: error.message
+              }
+            }));
+          }
+        },
+        {
+          enableHighAccuracy: config.highAccuracyMode,
+          timeout: config.timeout,
+          maximumAge: config.maximumAge
+        }
+      );
+    }
+  }
+
+  private stopTracking() {
+    if (this.watchId !== null) {
+      navigator.geolocation.clearWatch(this.watchId);
+      this.watchId = null;
     }
   }
 
@@ -126,6 +165,15 @@ class WebSocketService {
           maximumAge: 30000
         }
       );
+    }
+  }
+
+  updateConfig(config: Partial<LocationConfig>) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        type: 'config_update',
+        data: { config }
+      }));
     }
   }
 }

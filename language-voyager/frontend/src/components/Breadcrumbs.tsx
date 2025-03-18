@@ -1,6 +1,5 @@
 import React from 'react'
-import { Link } from 'react-router-dom'
-import { useNavigation } from '@/context/NavigationContext'
+import { Link, useLocation } from 'react-router-dom'
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -10,38 +9,49 @@ import {
   BreadcrumbSeparator,
 } from './ui/breadcrumb'
 
-const Breadcrumbs = () => {
-  const { breadcrumbs } = useNavigation()
+// Define route mappings for breadcrumbs
+const routeMappings: { [key: string]: string } = {
+  '': 'Home',
+  'map': 'Map',
+  'lessons': 'Lessons',
+  'achievements': 'Achievements',
+  'settings': 'Settings'
+}
 
-  if (breadcrumbs.length === 0) {
+const Breadcrumbs = () => {
+  const location = useLocation()
+  const paths = location.pathname.split('/').filter(Boolean)
+
+  if (paths.length === 0) {
     return null
   }
 
   return (
-    <Breadcrumb>
+    <Breadcrumb className="px-6 py-4">
       <BreadcrumbList>
         <BreadcrumbItem>
           <BreadcrumbLink as={Link} to="/">
             Home
           </BreadcrumbLink>
         </BreadcrumbItem>
-        <BreadcrumbSeparator />
-        
-        {breadcrumbs.map((crumb, index) => {
-          const isLast = index === breadcrumbs.length - 1
+
+        {paths.map((path, index) => {
+          const isLast = index === paths.length - 1
+          const href = `/${paths.slice(0, index + 1).join('/')}`
+          const label = routeMappings[path] || path
 
           return (
-            <React.Fragment key={crumb.path}>
+            <React.Fragment key={path}>
+              <BreadcrumbSeparator />
               <BreadcrumbItem>
                 {isLast ? (
-                  <BreadcrumbPage>{crumb.name}</BreadcrumbPage>
+                  <BreadcrumbPage>{label}</BreadcrumbPage>
                 ) : (
-                  <BreadcrumbLink as={Link} to={crumb.path}>
-                    {crumb.name}
+                  <BreadcrumbLink as={Link} to={href}>
+                    {label}
                   </BreadcrumbLink>
                 )}
               </BreadcrumbItem>
-              {!isLast && <BreadcrumbSeparator />}
             </React.Fragment>
           )
         })}

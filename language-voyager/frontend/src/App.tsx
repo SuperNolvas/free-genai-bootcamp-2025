@@ -8,6 +8,7 @@ import AppSidebar from './components/Sidebar';
 import Breadcrumbs from './components/Breadcrumbs';
 import AppRouter from './components/AppRouter';
 import { NavigationProvider } from './context/NavigationContext';
+import { WebSocketProvider } from './context/WebSocketContext';
 import {
   SidebarInset,
   SidebarProvider
@@ -24,26 +25,32 @@ function AppContent() {
 
   // For main app routes, render with full layout
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        <Breadcrumbs />
-        <AppRouter />
-      </SidebarInset>
-    </SidebarProvider>
+    <div className="relative flex min-h-screen">
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset className="flex-1">
+          <main className="flex min-h-[calc(100vh-theme(spacing.16))] flex-col gap-8 p-4 md:gap-8 md:p-10">
+            <Breadcrumbs />
+            <AppRouter />
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    </div>
   );
 }
 
 export default function App() {
   return (
-    <Provider store={store}>
-      <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-        <NavigationProvider>
-          <Router>
-            <AppContent />
-          </Router>
-        </NavigationProvider>
-      </ThemeProvider>
-    </Provider>
+    <Router>
+      <Provider store={store}>
+        <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+          <NavigationProvider>
+            <WebSocketProvider>
+              <AppContent />
+            </WebSocketProvider>
+          </NavigationProvider>
+        </ThemeProvider>
+      </Provider>
+    </Router>
   );
 }

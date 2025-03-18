@@ -1,5 +1,6 @@
 import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
+import ProtectedRoute from './auth/ProtectedRoute'
 
 const Map = React.lazy(() => import('@/pages/Map'))
 const Lessons = React.lazy(() => import('@/pages/Lessons'))
@@ -18,12 +19,40 @@ const AppRouter = () => {
           <Route path="register" element={<Register />} />
         </Route>
 
-        {/* App Routes */}
+        {/* Protected App Routes */}
         <Route path="/" element={<Navigate to="/map" replace />} />
-        <Route path="/map" element={<Map />} />
-        <Route path="/lessons" element={<Lessons />} />
-        <Route path="/achievements" element={<Achievements />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route
+          path="/map"
+          element={
+            <ProtectedRoute>
+              <Map />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/lessons"
+          element={
+            <ProtectedRoute>
+              <Lessons />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/achievements"
+          element={
+            <ProtectedRoute>
+              <Achievements />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Catch all route */}
         <Route path="*" element={<Navigate to="/map" replace />} />
