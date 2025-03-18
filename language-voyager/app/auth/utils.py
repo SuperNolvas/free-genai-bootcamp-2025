@@ -8,11 +8,12 @@ from sqlalchemy.orm import Session
 from ..database.config import get_db
 from ..models.user import User
 from ..core.config import get_settings
+import secrets
 
 settings = get_settings()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_PREFIX}/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_PREFIX}/auth/token")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
@@ -26,6 +27,12 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
         return None
     if not verify_password(password, user.hashed_password):
         return None
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Inactive user",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -83,3 +90,50 @@ async def authenticate_websocket_user(token: str, db: Session) -> Optional[User]
         return user
     except (JWTError, ExpiredSignatureError):
         return None
+
+def generate_verification_token() -> str:
+    """Generate a secure verification token"""
+    return secrets.token_urlsafe(32)
+
+def create_verification_token() -> str:
+    """Generate a verification token without database persistence"""
+    return generate_verification_token()
+
+def create_user_verification_token(user: User, db: Session) -> str:
+    """Create and store email verification token"""
+    token = generate_verification_token()
+    user.verification_token = token
+    user.verification_token_expires = datetime.utcnow() + timedelta(hours=24)
+    db.commit()
+    return token
+
+def verify_email_token(token: str, db: Session) -> Optional[User]:
+    """Verify email verification token and activate user if valid"""
+    user = db.query(User).filter(
+        User.verification_token == token,
+        User.verification_token_expires > datetime.utcnow()
+    ).first()
+    
+    if user:
+        user.email_verified = True
+        user.is_active = True
+        user.verification_token = None
+        user.verification_token_expires = None
+        db.commit()
+        return user
+    return None
+
+def create_password_reset_token(user: User, db: Session) -> str:
+    """Create and store password reset token"""
+    token = generate_verification_token()
+    user.password_reset_token = token
+    user.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
+    db.commit()
+    return token
+
+def verify_password_reset_token(token: str, db: Session) -> Optional[User]:
+    """Verify password reset token"""
+    return db.query(User).filter(
+        User.password_reset_token == token,
+        User.password_reset_expires > datetime.utcnow()
+    ).first()

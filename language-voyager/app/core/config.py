@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Language Voyager"
     DEBUG: bool = False
     
+    # Frontend URL for email verification and password reset links
+    FRONTEND_URL: str = "http://localhost:3000"
+    
     # Authentication - making these non-optional with secure defaults
     SECRET_KEY: str = "development-secret-key-change-in-production-00112233445566778899"
     JWT_SECRET_KEY: Optional[str] = None  # Will be initialized in __init__
