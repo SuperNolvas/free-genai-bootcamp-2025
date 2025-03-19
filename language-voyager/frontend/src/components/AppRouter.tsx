@@ -8,6 +8,8 @@ const Achievements = React.lazy(() => import('@/pages/Achievements'))
 const Settings = React.lazy(() => import('@/pages/Settings'))
 const Login = React.lazy(() => import('@/pages/auth/Login'))
 const Register = React.lazy(() => import('@/pages/auth/Register'))
+const ForgotPassword = React.lazy(() => import('@/pages/auth/ForgotPassword'))
+const ResetPassword = React.lazy(() => import('@/pages/auth/ResetPassword'))
 
 const AppRouter = () => {
   return (
@@ -17,6 +19,8 @@ const AppRouter = () => {
         <Route path="/auth">
           <Route path="login" element={<Login />} />
           <Route path="register" element={<Register />} />
+          <Route path="forgot-password" element={<ForgotPassword />} />
+          <Route path="reset-password" element={<ResetPassword />} />
         </Route>
 
         {/* Protected App Routes */}
