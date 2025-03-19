@@ -2035,120 +2035,130 @@ Next testing priorities:
 
 *Note: Stage 2 core features are now verified and stable. Ready to proceed with real-time features and advanced content generation.*
 
-## React Frontend Implementation Status (March 17, 2025)
-### Completed Features (✅)
-1. **Routing & Navigation**
-   - React Router setup with protected routes
-   - Lazy loading for route components
-   - Navigation guards for auth routes
-   - Breadcrumb system
-   - Default route redirection
+# Frontend Migration Plan (March 19, 2025)
 
-2. **Layout & UI**
-   - Responsive sidebar navigation
-   - Dark theme support with theme provider
-   - Basic page layouts (Map, Lessons, Achievements)
-   - Mobile-friendly design with collapsible sidebar
-   - Loading states and suspense boundaries
+## Current Status Assessment
+Current React implementation identified as overly complex with:
+- Multiple Redux stores and contexts
+- Complex component hierarchy
+- Heavy UI framework dependencies
+- Extensive routing logic
+- Complex state management
 
-3. **State Management**
-   - Redux store configuration
-   - Navigation context
-   - Theme persistence
-   - Auth state management
+## Simplified Architecture Plan
+### New Frontend Structure
+```
+frontend/
+├── index.html           # Main HTML with Alpine.js
+├── static/             
+│   ├── css/            # Tailwind CSS
+│   └── js/             # Alpine.js controllers
+├── components/         
+│   └── map/           # React components for ArcGIS
+│       ├── Map.tsx     # Main map component
+│       └── LocationTracker.tsx
+└── scripts/           
+    ├── auth.js         # Alpine.js auth controller
+    ├── progress.js     # Progress tracking
+    └── achievements.js # Achievement system
+```
 
-### In Progress Features (🔄)
-1. **Map Integration**
-   - Map component shell implemented
-   - Basic layout structure
-   - Placeholder for ArcGIS integration
-   - Location tracking preparations
+### Technology Stack
+1. **Core Technologies**
+   - Alpine.js for UI interactivity
+   - HTMX for dynamic updates
+   - Tailwind CSS for styling
+   - Minimal React for map features
 
-2. **Auth System**
-   - Login/Register routes
-   - Basic auth flow structure
-   - Protected route wrappers
-   - JWT handling setup
+2. **Removed Dependencies**
+   - Redux
+   - Material UI
+   - Radix UI
+   - Multiple React contexts
+   - Complex routing libraries
 
-### Pending Implementation (⏳)
+### Feature Migration Plan
+1. **Phase 1: Core Setup**
+   - ⏳ Basic HTML structure with Alpine.js
+   - ⏳ Auth forms with HTMX
+   - ⏳ Extract map components
+   - ⏳ Direct WebSocket setup
+
+2. **Phase 2: Features**
+   - ⏳ Progress tracking with Alpine.js
+   - ⏳ Achievement system with HTMX
+   - ⏳ Lesson content with HTMX
+   - ⏳ Offline storage setup
+
+3. **Phase 3: Enhancement**
+   - ⏳ PWA capabilities
+   - ⏳ Service worker
+   - ⏳ IndexedDB integration
+   - ⏳ Sync queue system
+
+### React Components (Minimal)
 1. **Map Features**
-   - ArcGIS map integration
-   - Real-time location tracking
+   - ArcGIS integration
+   - Location tracking
    - POI visualization
    - Region boundaries
-   - Offline map support
-   - Location-based content triggers
 
-2. **Lessons System**
-   - Lesson content display
-   - Progress tracking UI
-   - Difficulty adaptation
-   - Offline lesson access
-   - Exercise interfaces
+### Alpine.js Controllers
+1. **Auth Controller**
+   ```js
+   Alpine.data('auth', () => ({
+       isAuthenticated: false,
+       user: null,
+       // Auth methods
+   }))
+   ```
 
-3. **Achievement System**
-   - Achievement unlocking UI
-   - Progress visualization
-   - Reward animations
-   - Social sharing
-   - Achievement history
+2. **Progress Controller**
+   ```js
+   Alpine.data('progress', () => ({
+       // Progress tracking
+   }))
+   ```
 
-4. **WebSocket Features**
-   - Real-time location updates
-   - Live progress syncing
-   - Connection state management
-   - Reconnection handling
-   - Background updates
+3. **Achievement Controller**
+   ```js
+   Alpine.data('achievements', () => ({
+       // Achievement management
+   }))
+   ```
 
-5. **Offline Support**
-   - Service Worker setup
-   - IndexedDB integration
-   - Sync queue management
-   - Conflict resolution UI
-   - Progress persistence
+### Implementation Priorities
+1. **Immediate**
+   - Set up basic HTML structure
+   - Implement auth system
+   - Extract and simplify map components
+   - Set up WebSocket handling
 
-### Technical Stack
-- React 18 with TypeScript
-- Redux Toolkit for state management
-- React Router v6
-- Tailwind CSS with shadcn/ui
-- Lazy loading with Suspense
-- WebSocket for real-time features
+2. **Short Term**
+   - Migrate progress tracking
+   - Convert achievement system
+   - Implement lesson interfaces
+   - Add offline capabilities
 
-### Next Steps
-1. **Short Term (1-2 weeks)**
-   - Complete ArcGIS map integration
-   - Implement real-time location tracking
-   - Add basic lesson interfaces
-   - Implement achievement display
-
-2. **Medium Term (2-4 weeks)**
-   - Add offline support
-   - Implement lesson content system
-   - Add progress visualization
-   - Enhance map interactions
-
-3. **Long Term (4+ weeks)**
-   - Implement social features
-   - Add advanced achievements
-   - Enhance offline capabilities
-   - Add analytics and tracking
+3. **Medium Term**
+   - Enhance PWA features
+   - Improve offline sync
+   - Add analytics
+   - Optimize performance
 
 ### Quality Metrics
-- Test coverage target: 80%
 - Performance targets:
-  - First contentful paint < 1.5s
-  - Time to interactive < 3s
-  - Lighthouse score > 90
+  - First contentful paint < 1s
+  - Time to interactive < 2s
+  - Lighthouse score > 95
 - PWA requirements:
   - Offline functionality
-  - Installation support
   - Background sync
+  - Installation support
 - Accessibility: WCAG 2.1 AA compliance
 
-*Note: Frontend implementation progress tracked daily. Regular performance and accessibility testing ongoing.*
+*Note: This simplified architecture significantly reduces complexity while maintaining all required functionality. Map features remain in React for ArcGIS integration, while other features use lighter alternatives.*
 
-# Project Memory: Language Voyager Development Log
 ## Authentication System Verification (March 18, 2025)
 ### User Registration and Login Testing
 1. **Registration System** ✅

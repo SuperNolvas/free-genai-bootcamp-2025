@@ -1,4 +1,3 @@
-import apiService from './api';
 import webSocketService from './websocket';
 import arcgisService from './arcgis';
 
@@ -10,4 +9,4 @@ export const cleanup = () => {
   arcgisService.destroy();
 };
 
-export { apiService, webSocketService, arcgisService };
+export { webSocketService, arcgisService };
