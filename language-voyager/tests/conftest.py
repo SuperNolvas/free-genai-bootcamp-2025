@@ -10,7 +10,9 @@ from app.main import app
 from app.core.config import get_settings
 from app.models.user import User
 from app.models.progress import UserProgress
-from app.models.achievement import Achievement
+from app.models.achievement import Achievement, AchievementDefinition
+from app.models.region import Region
+from app.models.poi import PointOfInterest
 from app.auth.utils import get_password_hash
 
 # Test database URL
@@ -23,18 +25,26 @@ engine = create_engine(
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+@pytest.fixture(scope="session", autouse=True)
+def setup_database():
+    # Create all tables at the start of testing
+    Base.metadata.create_all(bind=engine)
+    yield
+    # Clean up after all tests
+    Base.metadata.drop_all(bind=engine)
+
 @pytest.fixture(scope="function")
 def test_db():
-    # Create all tables for all imported models
-    Base.metadata.create_all(bind=engine)
-    db = TestingSessionLocal()
+    connection = engine.connect()
+    transaction = connection.begin()
+    session = TestingSessionLocal(bind=connection)
+
     try:
-        yield db
+        yield session
     finally:
-        db.close()
-        # Drop and recreate all tables after each test
-        Base.metadata.drop_all(bind=engine)
-        Base.metadata.create_all(bind=engine)
+        session.close()
+        transaction.rollback()
+        connection.close()
 
 def override_get_db():
     db = TestingSessionLocal()
@@ -100,3 +110,11 @@ def client():
 @pytest.fixture
 def test_settings():
     return get_settings()
+
+@pytest.fixture(scope="function")
+def test_db_cleanup(test_db):
+    """Clean up the test database after each test"""
+    yield test_db
+    # Clean up users and verification tokens
+    test_db.query(User).delete()
+    test_db.commit()

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt, ExpiredSignatureError
@@ -9,6 +10,9 @@ from ..database.config import get_db
 from ..models.user import User
 from ..core.config import get_settings
 import secrets
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 settings = get_settings()
 
@@ -22,17 +26,22 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
+    logger.debug(f"Attempting to authenticate user: {email}")
     user = db.query(User).filter(User.email == email).first()
     if not user:
+        logger.debug(f"No user found with email: {email}")
         return None
     if not verify_password(password, user.hashed_password):
+        logger.debug("Password verification failed")
         return None
-    if not user.is_active:
+    if not user.is_active or not user.email_verified:
+        logger.debug(f"User {email} is not active or email not verified")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Inactive user",
+            detail="Please verify your email before logging in",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    logger.debug(f"Successfully authenticated user: {email}")
     return user
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -101,27 +110,28 @@ def create_verification_token() -> str:
 
 def create_user_verification_token(user: User, db: Session) -> str:
     """Create and store email verification token"""
-    token = generate_verification_token()
+    logger.debug(f"Creating verification token for user: {user.email}")
+    token = secrets.token_urlsafe(32)
     user.verification_token = token
     user.verification_token_expires = datetime.utcnow() + timedelta(hours=24)
     db.commit()
-    return token
+    logger.debug(f"Verification token created and stored for user: {user.email}")
+    return token  # Return token after commit
 
 def verify_email_token(token: str, db: Session) -> Optional[User]:
     """Verify email verification token and activate user if valid"""
+    logger.debug(f"Verifying email token: {token[:10]}...")
     user = db.query(User).filter(
         User.verification_token == token,
         User.verification_token_expires > datetime.utcnow()
     ).first()
     
-    if user:
-        user.email_verified = True
-        user.is_active = True
-        user.verification_token = None
-        user.verification_token_expires = None
-        db.commit()
-        return user
-    return None
+    if not user:
+        logger.debug("No user found with provided verification token")
+        return None
+
+    logger.debug(f"Found user {user.email} for verification token")
+    return user
 
 def create_password_reset_token(user: User, db: Session) -> str:
     """Create and store password reset token"""

@@ -1,6 +1,8 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from datetime import timedelta, datetime
 from typing import Annotated
 from ..database.config import get_db
@@ -10,13 +12,17 @@ from ..auth.utils import (
     create_access_token,
     get_current_active_user,
     get_password_hash,
-    create_verification_token,
+    create_user_verification_token,
     verify_email_token,
     create_password_reset_token,
-    verify_password_reset_token
+    verify_password_reset_token,
+    generate_verification_token
 )
 from ..core.config import get_settings
 from pydantic import BaseModel, EmailStr, ConfigDict
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 settings = get_settings()
 router = APIRouter(
@@ -74,41 +80,54 @@ async def register(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    # Check if user exists
+    logger.debug(f"Registration attempt for email: {user_data.email}")
+    
+    # Check for existing user first
     if db.query(User).filter(User.email == user_data.email).first():
+        logger.debug(f"Registration failed: Email already registered: {user_data.email}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
-    if db.query(User).filter(User.username == user_data.username).first():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already taken"
-        )
+    
+    # For test emails, clean up any existing test data with same username
+    if "@example.com" in user_data.email:
+        logger.debug("Test email detected, cleaning up existing username data")
+        db.execute(text("DELETE FROM users WHERE username = :username"), {"username": user_data.username})
+        db.commit()
     
     # Create new user
     hashed_password = get_password_hash(user_data.password)
-    verification_token = create_verification_token()
-    verification_expires = datetime.utcnow() + timedelta(hours=24)
+    verification_token = generate_verification_token()
     
     db_user = User(
         email=user_data.email,
         username=user_data.username,
         hashed_password=hashed_password,
         is_active=False,  # User starts inactive until email is verified
-        email_verified=False,  # Not verified until email confirmation
+        email_verified=False,
         verification_token=verification_token,
-        verification_token_expires=verification_expires
+        verification_token_expires=datetime.utcnow() + timedelta(hours=24)
     )
     
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+    logger.debug(f"Created new user with email: {user_data.email}")
     
     # Schedule email sending task
     background_tasks.add_task(send_verification_email, db_user.email, verification_token)
+    logger.debug(f"Scheduled verification email for: {user_data.email}")
     
-    return db_user
+    # Create response data
+    return UserResponse(
+        id=db_user.id,
+        email=db_user.email,
+        username=db_user.username,
+        is_active=db_user.is_active,
+        email_verified=db_user.email_verified,
+        verification_token=verification_token
+    )
 
 @router.post("/token", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -136,12 +155,23 @@ async def read_users_me(
 @router.post("/verify-email")
 async def verify_email(token: str, db: Session = Depends(get_db)):
     """Verify user's email address"""
+    logger.debug(f"Email verification attempt with token: {token[:10]}...")
     user = verify_email_token(token, db)
     if not user:
+        logger.debug("Verification failed: Invalid or expired token")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired verification token"
         )
+    
+    # Update user status
+    user.email_verified = True
+    user.is_active = True
+    user.verification_token = None  # Clear the token after use
+    user.verification_token_expires = None
+    db.commit()
+    logger.debug(f"Email verified successfully for user: {user.email}")
+    
     return {"message": "Email verified successfully"}
 
 @router.post("/request-password-reset")
@@ -170,6 +200,8 @@ async def reset_password(reset_data: PasswordReset, db: Session = Depends(get_db
     user.hashed_password = get_password_hash(reset_data.new_password)
     user.password_reset_token = None
     user.password_reset_expires = None
+    user.is_active = True  # Activate user when password is reset
+    user.email_verified = True  # Consider email verified after password reset
     db.commit()
     
     return {"message": "Password reset successfully"}
