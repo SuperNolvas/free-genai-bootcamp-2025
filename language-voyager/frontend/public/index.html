@@ -1,12 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Language Voyager</title>
-    
-    <!-- Debug Utility (Must be loaded before Alpine.js) -->
-    <script src="/static/js/debug.js"></script>
     
     <!-- Alpine.js -->
     <script defer src="https://unpkg.com/alpinejs@3.13.3/dist/cdn.min.js"></script>
@@ -14,294 +11,101 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- ArcGIS Maps -->
-    <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css">
-    
     <style>
-        html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-        }
-        #map-container {
-            position: relative;
-            height: calc(100vh - 4rem);
-            width: 100%;
-            min-height: 400px;
-        }
-        .esri-view {
-            height: 100%;
-        }
         [x-cloak] { display: none !important; }
     </style>
 </head>
 <body class="bg-gray-100">
-    <!-- Main Container -->
-    <div x-data="{ initialized: false }" x-init="initialized = true" x-cloak>
-        <div x-data="auth">
-            <!-- Loading State -->
-            <div x-show="!$store.auth.isAuthReady" 
-                 class="min-h-screen flex items-center justify-center">
-                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-            </div>
-
-            <!-- Auth Forms -->
-            <div x-show="!$store.auth.isAuthenticated && $store.auth.isAuthReady" 
-                 class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-                <div class="max-w-md w-full space-y-8">
-                    <!-- Login Form -->
-                    <div x-show="$store.auth.currentView === 'login'">
-                        <div class="bg-white p-8 rounded-lg shadow-md">
-                            <h2 class="text-2xl font-bold mb-6 text-gray-800">Welcome Back</h2>
-                            
-                            <form @submit.prevent="login">
-                                <!-- Email Input -->
-                                <div class="mb-4">
-                                    <label class="block text-gray-700 text-sm font-semibold mb-2">Email</label>
-                                    <input type="email" 
-                                           x-model="form.email"
-                                           class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                           :disabled="$store.auth.isLoading"
-                                           required>
-                                </div>
-                                
-                                <!-- Password Input -->
-                                <div class="mb-6">
-                                    <label class="block text-gray-700 text-sm font-semibold mb-2">Password</label>
-                                    <input type="password" 
-                                           x-model="form.password"
-                                           class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                           :disabled="$store.auth.isLoading"
-                                           required>
-                                </div>
-                                
-                                <!-- Error Message -->
-                                <div x-show="error" 
-                                     x-text="error"
-                                     class="text-red-500 text-sm mb-4"></div>
-                                
-                                <!-- Submit Button -->
-                                <button type="submit"
-                                        class="w-full bg-blue-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                                        :disabled="$store.auth.isLoading">
-                                    <span x-show="!$store.auth.isLoading">Sign In</span>
-                                    <span x-show="$store.auth.isLoading" class="flex items-center justify-center">
-                                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        Signing in...
-                                    </span>
-                                </button>
-
-                                <!-- Auth Links -->
-                                <div class="mt-4 flex items-center justify-between">
-                                    <button type="button" 
-                                            @click="$store.auth.setView('register')"
-                                            :disabled="$store.auth.isLoading"
-                                            class="text-sm text-blue-500 hover:text-blue-700">
-                                        Create an account
-                                    </button>
-                                    <button type="button"
-                                            @click="$store.auth.setView('resetRequest')"
-                                            :disabled="$store.auth.isLoading"
-                                            class="text-sm text-blue-500 hover:text-blue-700">
-                                        Forgot password?
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
+    <div x-data="loginForm" class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-md w-full space-y-8">
+            <div class="bg-white p-8 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">Welcome Back</h2>
+                
+                <form @submit.prevent="login">
+                    <!-- Email Input -->
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-semibold mb-2">Email</label>
+                        <input type="email" 
+                               x-model="email"
+                               class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               :disabled="loading"
+                               required>
                     </div>
-
-                    <!-- Registration Form -->
-                    <div x-show="$store.auth.currentView === 'register'">
-                        <div class="bg-white p-8 rounded-lg shadow-md">
-                            <h2 class="text-2xl font-bold mb-6 text-gray-800">Create Account</h2>
-                            
-                            <form @submit.prevent="register">
-                                <!-- Email Input -->
-                                <div class="mb-4">
-                                    <label class="block text-gray-700 text-sm font-semibold mb-2">Email</label>
-                                    <input type="email" 
-                                           x-model="registerForm.email"
-                                           class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                           required>
-                                </div>
-
-                                <!-- Username Input -->
-                                <div class="mb-4">
-                                    <label class="block text-gray-700 text-sm font-semibold mb-2">Username</label>
-                                    <input type="text" 
-                                           x-model="registerForm.username"
-                                           class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                           required>
-                                </div>
-                                
-                                <!-- Password Input -->
-                                <div class="mb-6">
-                                    <label class="block text-gray-700 text-sm font-semibold mb-2">Password</label>
-                                    <input type="password" 
-                                           x-model="registerForm.password"
-                                           class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                           required>
-                                </div>
-                                
-                                <!-- Error Message -->
-                                <div x-show="error" 
-                                     x-text="error"
-                                     class="text-red-500 text-sm mb-4"></div>
-                                
-                                <!-- Submit Button -->
-                                <button type="submit"
-                                        class="w-full bg-blue-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                                    Create Account
-                                </button>
-
-                                <!-- Back to Login -->
-                                <div class="mt-4 text-center">
-                                    <button type="button"
-                                            @click="$store.auth.setView('login')"
-                                            class="text-sm text-blue-500 hover:text-blue-700">
-                                        Already have an account? Sign in
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
+                    
+                    <!-- Password Input -->
+                    <div class="mb-6">
+                        <label class="block text-gray-700 text-sm font-semibold mb-2">Password</label>
+                        <input type="password" 
+                               x-model="password"
+                               class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               :disabled="loading"
+                               required>
                     </div>
-
-                    <!-- Password Reset Request Form -->
-                    <div x-show="$store.auth.currentView === 'resetRequest'">
-                        <div class="bg-white p-8 rounded-lg shadow-md">
-                            <h2 class="text-2xl font-bold mb-6 text-gray-800">Reset Password</h2>
-                            
-                            <form @submit.prevent="requestPasswordReset">
-                                <!-- Email Input -->
-                                <div class="mb-6">
-                                    <label class="block text-gray-700 text-sm font-semibold mb-2">Email</label>
-                                    <input type="email" 
-                                           x-model="resetForm.email"
-                                           class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                           required>
-                                </div>
-                                
-                                <!-- Error/Success Message -->
-                                <div x-show="error" 
-                                     x-text="error"
-                                     class="text-red-500 text-sm mb-4"></div>
-                                <div x-show="resetRequestSuccess" 
-                                     x-text="resetRequestSuccess"
-                                     class="text-green-500 text-sm mb-4"></div>
-                                
-                                <!-- Submit Button -->
-                                <button type="submit"
-                                        class="w-full bg-blue-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                                    Send Reset Link
-                                </button>
-
-                                <!-- Back to Login -->
-                                <div class="mt-4 text-center">
-                                    <button type="button"
-                                            @click="$store.auth.setView('login')"
-                                            class="text-sm text-blue-500 hover:text-blue-700">
-                                        Back to login
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Email Verification Notice -->
-                    <div x-show="showVerificationNotice" x-transition>
-                        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-                            <div class="flex">
-                                <div class="flex-shrink-0">
-                                    <svg class="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                                    </svg>
-                                </div>
-                                <div class="ml-3">
-                                    <p class="text-sm text-yellow-700">
-                                        Please check your email to verify your account.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Main App -->
-            <div x-show="$store.auth.isAuthenticated && $store.auth.isAuthReady" 
-                 x-data="app">
-                <nav class="bg-white shadow-sm">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div class="flex justify-between h-16">
-                            <div class="flex">
-                                <div class="flex-shrink-0 flex items-center">
-                                    <span class="text-xl font-bold text-gray-800">Language Voyager</span>
-                                </div>
-                                <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
-                                    <button x-on:click="activeView = 'map'" data-view="map"
-                                            :class="{'border-blue-500 text-gray-900': activeView === 'map', 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300': activeView !== 'map'}"
-                                            class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                                        Map
-                                    </button>
-                                    <button x-on:click="activeView = 'progress'" data-view="progress"
-                                            :class="{'border-blue-500 text-gray-900': activeView === 'progress', 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300': activeView !== 'progress'}"
-                                            class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                                        Progress
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="flex items-center">
-                                <button @click="logout"
-                                        class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium">
-                                    Logout
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </nav>
-
-                <!-- View Container -->
-                <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-                    <!-- Map View -->
-                    <div x-show="activeView === 'map'" x-cloak>
-                        <div id="map-container" class="h-[calc(100vh-4rem)] w-full rounded-lg shadow-md"></div>
-                    </div>
-
-                    <!-- Progress View -->
-                    <div x-show="activeView === 'progress'" x-cloak
-                         x-data="progress">
-                        <div class="bg-white rounded-lg shadow-md p-6">
-                            <h2 class="text-xl font-semibold text-gray-800 mb-4">Your Progress</h2>
-                            
-                            <!-- Loading State -->
-                            <div x-show="loading" class="animate-pulse" id="progress-placeholder">
-                                <div class="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
-                                <div class="h-4 bg-gray-200 rounded w-1/2 mb-4"></div>
-                                <div class="h-4 bg-gray-200 rounded w-2/3"></div>
-                            </div>
-                            
-                            <!-- Error State -->
-                            <div x-show="error" class="text-red-600" x-text="error"></div>
-                            
-                            <!-- Progress Content -->
-                            <div x-show="stats && !loading">
-                                <!-- Your progress stats rendering here -->
-                            </div>
-                        </div>
-                    </div>
-                </main>
+                    
+                    <!-- Error Message -->
+                    <div x-show="error" 
+                         x-text="error"
+                         class="text-red-500 text-sm mb-4"></div>
+                    
+                    <!-- Submit Button -->
+                    <button type="submit"
+                            class="w-full bg-blue-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                            :disabled="loading">
+                        <span x-show="!loading">Sign In</span>
+                        <span x-show="loading" class="flex items-center justify-center">
+                            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Signing in...
+                        </span>
+                    </button>
+                </form>
             </div>
         </div>
     </div>
 
-    <!-- Load scripts -->
-    <script src="https://js.arcgis.com/4.28/"></script>
-    <script src="/static/js/auth.js"></script>
-    <script src="/static/js/app.js"></script>
-    <script src="/static/js/progress.js"></script>
-    <script type="module" src="/static/js/map-bundle.js"></script>
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('loginForm', () => ({
+                email: '',
+                password: '',
+                error: null,
+                loading: false,
+
+                async login() {
+                    this.error = null;
+                    this.loading = true;
+
+                    try {
+                        const response = await fetch('/api/v1/auth/token', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded'
+                            },
+                            body: new URLSearchParams({
+                                username: this.email,
+                                password: this.password
+                            })
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            localStorage.setItem('token', data.access_token);
+                            window.location.href = '/dashboard.html';
+                        } else {
+                            const error = await response.json();
+                            this.error = error.detail || 'Login failed';
+                        }
+                    } catch (error) {
+                        console.error('Login error:', error);
+                        this.error = 'An error occurred during login';
+                    } finally {
+                        this.loading = false;
+                    }
+                }
+            }));
+        });
+    </script>
 </body>
 </html>

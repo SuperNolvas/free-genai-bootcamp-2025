@@ -229,3 +229,43 @@ async def reset_password(reset_data: PasswordReset, db: Session = Depends(get_db
     db.commit()
     
     return {"message": "Password reset successfully"}
+
+@router.get("/validate")
+async def validate_token(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Annotated[Session, Depends(get_db)]
+) -> dict:
+    """Validate the current token and return user info"""
+    try:
+        # Refresh the session
+        db.refresh(current_user)
+        
+        if not current_user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User is inactive"
+            )
+            
+        return {
+            "valid": True,
+            "user": {
+                "id": current_user.id,
+                "email": current_user.email,
+                "username": current_user.username
+            }
+        }
+        
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in validate_token: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in validate_token: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed"
+        )

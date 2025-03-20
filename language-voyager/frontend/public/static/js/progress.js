@@ -6,20 +6,23 @@ document.addEventListener('alpine:init', () => {
         achievements: [],
 
         init() {
-            if (Alpine.store('auth').isAuthenticated) {
+            // Load progress only if we're already authenticated
+            if (window.authStore && window.authStore.isAuthenticated) {
                 this.loadProgress();
             }
         },
 
         async loadProgress() {
+            if (!Alpine.store('auth').isAuthenticated) return;
+            
             try {
+                this.loading = true;
+                this.error = null;
+                
                 const token = Alpine.store('auth').getToken();
                 if (!token) {
                     throw new Error('No authentication token');
                 }
-
-                this.loading = true;
-                this.error = null;
 
                 const response = await fetch('/api/v1/progress', {
                     headers: {

@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from contextlib import asynccontextmanager
+from pathlib import Path
 from .database.config import engine, get_db, SessionLocal
 from .models import user, progress, content, arcgis_usage
 from .routers import auth, progress as progress_router, map, conversation
@@ -24,7 +25,6 @@ import asyncio
 import datetime
 from typing import Dict, Optional
 import os
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,9 @@ arcgis_usage.Base.metadata.create_all(bind=engine)
 
 # Store the sync manager instance
 sync_manager = None
+
+# Define frontend paths
+frontend_path = Path(__file__).parent.parent / "frontend" / "public"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -60,9 +63,9 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     debug=settings.DEBUG,
     lifespan=lifespan,
-    docs_url="/api/docs",  # Move Swagger UI to /api/docs
-    redoc_url="/api/redoc",  # Move ReDoc to /api/redoc
-    openapi_url="/api/openapi.json"  # Move OpenAPI schema to /api/openapi.json
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json"
 )
 
 # Configure CORS
@@ -75,34 +78,21 @@ app.add_middleware(
 )
 
 # Include API routers with prefix
-app.include_router(
-    auth.router,
-    prefix=settings.API_V1_PREFIX
-)
-app.include_router(
-    progress_router.router,
-    prefix=settings.API_V1_PREFIX
-)
-app.include_router(
-    conversation.router,
-    prefix=settings.API_V1_PREFIX
-)
-
-# Include map router without WebSocket endpoint
-map_router = map.router
-app.include_router(
-    map_router,
-    prefix=settings.API_V1_PREFIX,
-    tags=["map"]
-)
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(progress_router.router, prefix="/api/v1")
+app.include_router(map.router, prefix="/api/v1/map")
+app.include_router(conversation.router, prefix="/api/v1/conversation")
 
 # Mount static files
-frontend_path = Path(__file__).parent.parent / "frontend" / "public"
 app.mount("/static", StaticFiles(directory=str(frontend_path / "static")), name="static")
 
 @app.get("/")
 async def serve_index():
     return FileResponse(str(frontend_path / "index.html"))
+
+@app.get("/dashboard.html")
+async def serve_dashboard():
+    return FileResponse(str(frontend_path / "dashboard.html"))
 
 async def get_websocket_user(websocket: WebSocket) -> User:
     """Authenticate WebSocket connection and return user"""

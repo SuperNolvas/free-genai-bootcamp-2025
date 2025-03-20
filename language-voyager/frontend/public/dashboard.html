@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Language Voyager</title>
+    
+    <!-- Alpine.js -->
+    <script defer src="https://unpkg.com/alpinejs@3.13.3/dist/cdn.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- ArcGIS Maps -->
+    <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css">
+    
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        #map-container {
+            position: relative;
+            height: calc(100vh - 4rem);
+            width: 100%;
+            min-height: 400px;
+        }
+        .esri-view {
+            height: 100%;
+        }
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div x-data="dashboard" x-init="checkAuth" x-cloak>
+        <nav class="bg-white shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0 flex items-center">
+                            <span class="text-xl font-bold text-gray-800">Language Voyager</span>
+                        </div>
+                        <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+                            <!-- Navigation Links -->
+                            <a 
+                                href="#" 
+                                @click.prevent="$store.app.activeView = 'map'"
+                                class="inline-flex items-center px-1 pt-1 text-sm font-medium"
+                                :class="$store.app.activeView === 'map' ? 'text-blue-500 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-700'"
+                            >
+                                Map
+                            </a>
+                            <a 
+                                href="#" 
+                                @click.prevent="$store.app.activeView = 'progress'"
+                                class="inline-flex items-center px-1 pt-1 text-sm font-medium"
+                                :class="$store.app.activeView === 'progress' ? 'text-blue-500 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-700'"
+                            >
+                                Progress
+                            </a>
+                            <span x-text="user.email" class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500"></span>
+                        </div>
+                    </div>
+                    <div class="flex items-center">
+                        <button @click="logout"
+                                class="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium">
+                            Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <!-- Map View -->
+            <div x-show="$store.app.activeView === 'map'" id="map-container" class="rounded-lg shadow-md"></div>
+
+            <!-- Progress View -->
+            <div x-show="$store.app.activeView === 'progress'" x-data="progress" class="bg-white rounded-lg shadow-md p-6">
+                <div x-show="loading" class="text-center py-12">
+                    <div class="inline-block animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+                    <p class="mt-2 text-gray-600">Loading progress...</p>
+                </div>
+
+                <template x-if="!loading">
+                    <div class="space-y-6">
+                        <h2 class="text-2xl font-bold text-gray-800">Your Progress</h2>
+                        
+                        <div x-show="error" class="bg-red-50 text-red-600 p-4 rounded-md" x-text="error"></div>
+                        
+                        <template x-if="!error">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <!-- Progress stats will be implemented here -->
+                                <div class="bg-gray-50 p-4 rounded-lg">
+                                    <h3 class="font-medium text-gray-700">Coming Soon</h3>
+                                    <p class="text-gray-600 mt-1">Progress tracking features are under development</p>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+        </main>
+    </div>
+
+    <!-- Load ArcGIS Map script -->
+    <script src="https://js.arcgis.com/4.28/"></script>
+    <script src="/static/js/map-bundle.js"></script>
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/progress.js"></script>
+    
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('dashboard', () => ({
+                user: {},
+                
+                async checkAuth() {
+                    const token = localStorage.getItem('token');
+                    if (!token) {
+                        window.location.href = '/';
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch('/api/v1/auth/validate', {
+                            headers: {
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Invalid token');
+                        }
+
+                        const data = await response.json();
+                        this.user = data.user;
+                        
+                        // Trigger map initialization after auth is confirmed
+                        window.dispatchEvent(new Event('map:refresh'));
+                    } catch (error) {
+                        console.error('Auth error:', error);
+                        localStorage.removeItem('token');
+                        window.location.href = '/';
+                    }
+                },
+
+                logout() {
+                    localStorage.removeItem('token');
+                    window.location.href = '/';
+                }
+            }));
+        });
+    </script>
+</body>
+</html>
