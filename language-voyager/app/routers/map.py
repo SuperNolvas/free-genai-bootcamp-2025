@@ -1146,16 +1146,20 @@ async def get_location_details(
         'neighborhood': address.get('Neighborhood') or address.get('District'),
         'water_body': next((f.get('attributes', {}).get('Name') for f in features if f.get('attributes', {}).get('FeatureType') == 'WaterFeature'), None)
     }
-
-    # Build descriptive text prioritizing the most specific location info
+    
+    # Build descriptive text with appropriate prefix
     if location_info['water_body']:
+        location_type = 'Water body'
         description = location_info['water_body']
     elif location_info['street']:
+        location_type = 'Street'
         description = location_info['street']
     elif location_info['neighborhood']:
+        location_type = 'Neighborhood'
         description = location_info['neighborhood']
     else:
+        location_type = 'Location'
         description = location_info['coordinates']
     
-    location_info['description'] = description
+    location_info['description'] = f"{location_type} near {description}"
     return location_info

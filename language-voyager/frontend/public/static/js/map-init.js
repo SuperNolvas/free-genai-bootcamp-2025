@@ -153,11 +153,11 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
             // Get detailed location information
             const locationDetails = await this.getLocationDetails(location.latitude, location.longitude);
             
-            // Create location context with properly formatted description
+            // Create location context without adding extra "near" prefix
             const locationDetail = {
                 ...location,
                 type: poiType,
-                name: `${poiType.charAt(0).toUpperCase() + poiType.slice(1)} near ${locationDetails.description}`,
+                name: `${locationDetails.description}`,
                 region: 'Tokyo'  // Default to Tokyo for now
             };
 
@@ -173,14 +173,14 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
         }
 
         determinePOIType(location) {
-            // Simple POI type detection based on map zoom and location
+            // Adjusted zoom thresholds for better type detection
             if (!this.view) return 'area';
             
-            if (this.view.zoom >= 18) {
+            if (this.view.zoom >= 19) {
                 return 'building';
-            } else if (this.view.zoom >= 15) {
+            } else if (this.view.zoom >= 17) {
                 return 'street';
-            } else if (this.view.zoom >= 12) {
+            } else if (this.view.zoom >= 13) {
                 return 'neighborhood';
             } else {
                 return 'area';
