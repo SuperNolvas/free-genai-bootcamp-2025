@@ -27,6 +27,8 @@ async def chat(
 ) -> ResponseModel[ConversationResponse]:
     """Generate a context-aware conversation response"""
     try:
+        print(f"Processing chat request with context: {request.context}")
+        
         # Format messages for OpenRouter API
         api_messages = [
             {"role": msg.role, "content": msg.content}
@@ -34,22 +36,35 @@ async def chat(
         ]
         
         # Get response from LLM
-        response = await llm_service.generate_conversation(
-            messages=api_messages,
-            context=request.context.model_dump(),
-            temperature=request.temperature,
-            model=request.model
-        )
+        try:
+            response = await llm_service.generate_conversation(
+                messages=api_messages,
+                context=request.context.model_dump(),
+                temperature=request.temperature,
+                model=request.model
+            )
+        except ValueError as e:
+            print(f"OpenRouter API error: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error from language model service: {str(e)}"
+            )
         
         # Extract assistant's message
-        assistant_message = Message(
-            role="assistant",
-            content=response["choices"][0]["message"]["content"],
-            timestamp=datetime.utcnow()
-        )
+        try:
+            assistant_message = Message(
+                role="assistant",
+                content=response["choices"][0]["message"]["content"],
+                timestamp=datetime.utcnow()
+            )
+        except (KeyError, IndexError) as e:
+            print(f"Error parsing OpenRouter response: {response}")
+            raise HTTPException(
+                status_code=500,
+                detail="Invalid response format from language model service"
+            )
         
         # Parse response for corrections and cultural notes
-        # This could be enhanced with more sophisticated parsing
         corrections = []
         cultural_notes = []
         message_content = assistant_message.content.lower()
@@ -84,6 +99,7 @@ async def chat(
         )
         
     except Exception as e:
+        print(f"Unexpected error in chat endpoint: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Error generating conversation response: {str(e)}"

@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     
     # OpenRouter settings
     OPENROUTER_API_KEY: Optional[str] = None
-    OPENROUTER_DEFAULT_MODEL: Optional[str] = None
+    LLM_MODEL: Optional[str] = None  # Changed from OPENROUTER_DEFAULT_MODEL to match .env
     
     # Location Updates
     LOCATION_UPDATE_MIN_INTERVAL: float = 1.0
@@ -60,11 +60,14 @@ class Settings(BaseSettings):
 
     model_config = ConfigDict(
         env_file=".env",
+        env_file_encoding='utf-8',
         case_sensitive=True,
         extra="allow",
     )
 
     def __init__(self, **data):
+        # Ensure we look for .env in the project root
+        data['_env_file'] = str(Path(__file__).parent.parent.parent / '.env')
         super().__init__(**data)
         # Always use SECRET_KEY for JWT if JWT_SECRET_KEY is not explicitly set
         if self.JWT_SECRET_KEY is None:
