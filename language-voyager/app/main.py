@@ -1,5 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, status, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from contextlib import asynccontextmanager
@@ -21,6 +23,8 @@ import logging
 import asyncio
 import datetime
 from typing import Dict, Optional
+import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +59,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     debug=settings.DEBUG,
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url="/api/docs",  # Move Swagger UI to /api/docs
+    redoc_url="/api/redoc",  # Move ReDoc to /api/redoc
+    openapi_url="/api/openapi.json"  # Move OpenAPI schema to /api/openapi.json
 )
 
 # Configure CORS
@@ -88,6 +95,14 @@ app.include_router(
     prefix=settings.API_V1_PREFIX,
     tags=["map"]
 )
+
+# Mount static files
+frontend_path = Path(__file__).parent.parent / "frontend" / "public"
+app.mount("/static", StaticFiles(directory=str(frontend_path / "static")), name="static")
+
+@app.get("/")
+async def serve_index():
+    return FileResponse(str(frontend_path / "index.html"))
 
 async def get_websocket_user(websocket: WebSocket) -> User:
     """Authenticate WebSocket connection and return user"""
@@ -266,10 +281,6 @@ async def shutdown_event():
     """Clean up services on shutdown"""
     await location_manager.stop()
     await manager.cleanup()  # Add Redis cleanup
-
-@app.get("/")
-async def root():
-    return {"message": f"Welcome to {settings.PROJECT_NAME} API"}
 
 @app.get("/health")
 async def health_check(db: Session = Depends(get_db)):

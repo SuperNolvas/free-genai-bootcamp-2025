@@ -1,17 +1,21 @@
 import React from 'react';
-import { useLocationTracking } from '@/hooks/useLocationTracking';
 import { MapPin } from 'lucide-react';
+import type { LocationUpdate } from '../../types/api';
 
-export function LocationTracker() {
-  const { location } = useLocationTracking();
+interface LocationTrackerProps {
+  location?: LocationUpdate;
+}
 
-  return location ? (
-    <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm">
+export function LocationTracker({ location }: LocationTrackerProps) {
+  if (!location?.latitude || !location?.longitude) return null;
+
+  return (
+    <div className="flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm shadow-lg">
       <MapPin className="h-5 w-5" />
       <span>
-        Location: {location.coords.latitude.toFixed(4)}, {location.coords.longitude.toFixed(4)}
-        {location.coords.accuracy && ` (±${Math.round(location.coords.accuracy)}m)`}
+        Location: {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+        {location.accuracy && ` (±${Math.round(location.accuracy)}m)`}
       </span>
     </div>
-  ) : null;
+  );
 }

@@ -34,11 +34,11 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     if not verify_password(password, user.hashed_password):
         logger.debug("Password verification failed")
         return None
-    if not user.is_active or not user.email_verified:
-        logger.debug(f"User {email} is not active or email not verified")
+    if not user.is_active:
+        logger.debug(f"User {email} is not active")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Please verify your email before logging in",
+            detail="Account is not active",
             headers={"WWW-Authenticate": "Bearer"},
         )
     logger.debug(f"Successfully authenticated user: {email}")

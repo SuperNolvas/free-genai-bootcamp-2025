@@ -6,15 +6,21 @@ import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol';
 import Polygon from '@arcgis/core/geometry/Polygon';
 import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol';
 import { POI, LocationUpdate } from '@/types/api';
-import { store } from '@/store/store';
 
 interface Region {
   id: string;
   name: string;
   center_lat: number;
   center_lon: number;
-  // Add other region properties as needed
+  bounds?: {
+    north: number;
+    south: number;
+    east: number;
+    west: number;
+  };
 }
+
+type LocationChangeListener = (location: LocationUpdate) => void;
 
 export class ArcGISMapService {
   private map: ArcGISMap | null = null;
@@ -22,6 +28,13 @@ export class ArcGISMapService {
   private locationMarker: Graphic | null = null;
   private poiMarkers = new Map<string, Graphic>();
   private regionPolygons = new Map<string, Graphic>();
+  private locationListeners: LocationChangeListener[] = [];
+
+  // Tokyo coordinates
+  private TOKYO_CENTER = {
+    latitude: 35.6762,
+    longitude: 139.6503
+  };
 
   async initialize(container: HTMLDivElement) {
     this.map = new ArcGISMap({
@@ -31,7 +44,8 @@ export class ArcGISMapService {
     this.view = new MapView({
       container,
       map: this.map,
-      zoom: 15
+      center: [this.TOKYO_CENTER.longitude, this.TOKYO_CENTER.latitude],
+      zoom: 12
     });
 
     // Create location marker symbol
@@ -50,17 +64,32 @@ export class ArcGISMapService {
     });
     this.view.graphics.add(this.locationMarker);
 
-    // Subscribe to location updates
-    store.subscribe(() => {
-      const state = store.getState();
-      const location = state.map.currentLocation;
-      
-      if (location) {
-        this.updateLocation(location.latitude, location.longitude);
+    // Add Tokyo region boundary
+    this.addRegionPolygon({
+      id: "tokyo",
+      name: "Tokyo",
+      center_lat: this.TOKYO_CENTER.latitude,
+      center_lon: this.TOKYO_CENTER.longitude,
+      bounds: {
+        north: 35.8187,
+        south: 35.5311,
+        east: 139.9224,
+        west: 139.5804
       }
     });
 
     return this.view;
+  }
+
+  onLocationChange(listener: LocationChangeListener) {
+    this.locationListeners.push(listener);
+    return () => {
+      this.locationListeners = this.locationListeners.filter(l => l !== listener);
+    };
+  }
+
+  private notifyLocationChange(location: LocationUpdate) {
+    this.locationListeners.forEach(listener => listener(location));
   }
 
   private updateLocation(latitude: number, longitude: number) {
@@ -73,11 +102,11 @@ export class ArcGISMapService {
   }
 
   updateLocationMarker(location: LocationUpdate) {
-    if (!this.view || !location.coords) return;
+    if (!this.view || !location.latitude || !location.longitude) return;
 
     const point = new Point({
-      longitude: location.coords.longitude,
-      latitude: location.coords.latitude,
+      longitude: location.longitude,
+      latitude: location.latitude,
       spatialReference: { wkid: 4326 }
     });
 
@@ -99,16 +128,9 @@ export class ArcGISMapService {
     } else {
       this.locationMarker.geometry = point;
     }
-  }
 
-  subscribeToLocationUpdates() {
-    return store.subscribe(() => {
-      const state = store.getState();
-      const location = state.map.currentLocation;
-      if (location?.coords) {
-        this.updateLocation(location.coords.latitude, location.coords.longitude);
-      }
-    });
+    this.updateLocation(location.latitude, location.longitude);
+    this.notifyLocationChange(location);
   }
 
   addPOI(poi: POI) {
@@ -157,18 +179,18 @@ export class ArcGISMapService {
     this.poiMarkers.set(poi.id, graphic);
   }
 
-  addRegionPolygon(region: Region) {
+  addRegionPolygon(region: Region & { bounds?: { north: number; south: number; east: number; west: number } }) {
     if (!this.view) return;
 
     const polygonGeometry = {
       type: "polygon" as const,
       rings: [
         [
-          [region.center_lon - 0.1, region.center_lat - 0.1],
-          [region.center_lon + 0.1, region.center_lat - 0.1],
-          [region.center_lon + 0.1, region.center_lat + 0.1],
-          [region.center_lon - 0.1, region.center_lat + 0.1],
-          [region.center_lon - 0.1, region.center_lat - 0.1]
+          [region.bounds?.west || region.center_lon - 0.1, region.bounds?.south || region.center_lat - 0.1],
+          [region.bounds?.east || region.center_lon + 0.1, region.bounds?.south || region.center_lat - 0.1],
+          [region.bounds?.east || region.center_lon + 0.1, region.bounds?.north || region.center_lat + 0.1],
+          [region.bounds?.west || region.center_lon - 0.1, region.bounds?.north || region.center_lat + 0.1],
+          [region.bounds?.west || region.center_lon - 0.1, region.bounds?.south || region.center_lat - 0.1]
         ]
       ],
       spatialReference: { wkid: 4326 }

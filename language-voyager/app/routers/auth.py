@@ -104,10 +104,10 @@ async def register(
         email=user_data.email,
         username=user_data.username,
         hashed_password=hashed_password,
-        is_active=False,  # User starts inactive until email is verified
-        email_verified=False,
-        verification_token=verification_token,
-        verification_token_expires=datetime.utcnow() + timedelta(hours=24)
+        is_active=True,  # Changed: User starts active
+        email_verified=True,  # Changed: Email auto-verified
+        verification_token=None,  # Changed: No verification needed
+        verification_token_expires=None
     )
     
     db.add(db_user)
@@ -115,18 +115,13 @@ async def register(
     db.refresh(db_user)
     logger.debug(f"Created new user with email: {user_data.email}")
     
-    # Schedule email sending task
-    background_tasks.add_task(send_verification_email, db_user.email, verification_token)
-    logger.debug(f"Scheduled verification email for: {user_data.email}")
-    
-    # Create response data
     return UserResponse(
         id=db_user.id,
         email=db_user.email,
         username=db_user.username,
         is_active=db_user.is_active,
         email_verified=db_user.email_verified,
-        verification_token=verification_token
+        verification_token=None
     )
 
 @router.post("/token", response_model=Token)
