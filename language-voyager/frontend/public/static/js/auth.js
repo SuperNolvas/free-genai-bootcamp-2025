@@ -1,9 +1,101 @@
 document.addEventListener('alpine:init', () => {
-    Alpine.data('auth', () => ({
+    // Create a single auth store instance
+    if (window.authStore) return;
+    
+    window.authStore = {
         isAuthenticated: false,
-        authView: 'login', // login, register, resetRequest
-        showVerificationNotice: false,
-        resetRequestSuccess: null,
+        isAuthReady: false,
+        token: null,
+        user: null,
+        currentView: 'login',
+        isLoading: false
+    };
+
+    Alpine.store('auth', {
+        ...window.authStore,
+
+        async init() {
+            // Prevent re-initialization
+            if (this.isAuthReady || this.isLoading) return;
+            
+            this.isLoading = true;
+            this.token = localStorage.getItem('token');
+            
+            try {
+                if (this.token) {
+                    const response = await fetch('/api/v1/auth/validate', {
+                        headers: {
+                            'Authorization': `Bearer ${this.token}`
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.user = data.user;
+                        this.isAuthenticated = true;
+                    } else {
+                        this.clearAuthState();
+                    }
+                }
+            } catch (error) {
+                console.error('Auth validation error:', error);
+                this.clearAuthState();
+            } finally {
+                this.isAuthReady = true;
+                this.isLoading = false;
+                // Update the persistent store
+                Object.assign(window.authStore, {
+                    isAuthenticated: this.isAuthenticated,
+                    isAuthReady: this.isAuthReady,
+                    token: this.token,
+                    user: this.user,
+                    currentView: this.currentView
+                });
+            }
+        },
+
+        getToken() {
+            return this.token;
+        },
+
+        setToken(token) {
+            this.token = token;
+            if (token) {
+                localStorage.setItem('token', token);
+                this.isAuthenticated = true;
+                Object.assign(window.authStore, {
+                    isAuthenticated: true,
+                    token: token
+                });
+            } else {
+                this.clearAuthState();
+            }
+        },
+
+        setView(view) {
+            if (!this.isLoading) {
+                this.currentView = view;
+                window.authStore.currentView = view;
+            }
+        },
+
+        clearAuthState() {
+            this.token = null;
+            this.user = null;
+            this.isAuthenticated = false;
+            this.currentView = 'login';
+            localStorage.removeItem('token');
+            Object.assign(window.authStore, {
+                isAuthenticated: false,
+                token: null,
+                user: null,
+                currentView: 'login'
+            });
+        }
+    });
+
+    Alpine.data('auth', () => ({
+        error: null,
         form: {
             email: '',
             password: ''
@@ -16,147 +108,49 @@ document.addEventListener('alpine:init', () => {
         resetForm: {
             email: ''
         },
-        error: null,
+        showVerificationNotice: false,
+        resetRequestSuccess: null,
 
         init() {
-            // Check for existing token
-            const token = localStorage.getItem('token');
-            if (token) {
-                this.validateToken(token);
-            }
-            
-            // Check URL for verification token
-            const urlParams = new URLSearchParams(window.location.search);
-            const verifyToken = urlParams.get('verify_token');
-            if (verifyToken) {
-                this.verifyEmail(verifyToken);
+            // Single initialization call
+            if (!window.authStore.isAuthReady && !window.authStore.isLoading) {
+                Alpine.store('auth').init();
             }
         },
 
         async login() {
             this.error = null;
+            Alpine.store('auth').isLoading = true;
+            
             try {
                 const response = await fetch('/api/v1/auth/token', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Content-Type': 'application/x-www-form-urlencoded'
                     },
                     body: new URLSearchParams({
                         username: this.form.email,
                         password: this.form.password
                     })
                 });
-                const data = await response.json();
+
                 if (response.ok) {
-                    localStorage.setItem('token', data.access_token);
-                    this.isAuthenticated = true;
-                    this.error = null;
+                    const data = await response.json();
+                    Alpine.store('auth').setToken(data.access_token);
                 } else {
-                    this.error = data.detail || 'Login failed';
+                    const error = await response.json();
+                    this.error = error.detail || 'Login failed';
                 }
-            } catch (err) {
+            } catch (error) {
+                console.error('Login error:', error);
                 this.error = 'An error occurred during login';
-                console.error('Login error:', err);
-            }
-        },
-
-        async register() {
-            this.error = null;
-            try {
-                const response = await fetch('/api/v1/auth/register', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(this.registerForm)
-                });
-                const data = await response.json();
-                if (response.ok) {
-                    this.showVerificationNotice = true;
-                    this.authView = 'login';
-                    this.error = null;
-                } else {
-                    this.error = data.detail || 'Registration failed';
-                }
-            } catch (err) {
-                this.error = 'An error occurred during registration';
-                console.error('Registration error:', err);
-            }
-        },
-
-        async requestPasswordReset() {
-            this.error = null;
-            this.resetRequestSuccess = null;
-            try {
-                const response = await fetch('/api/v1/auth/request-password-reset', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ email: this.resetForm.email })
-                });
-                const data = await response.json();
-                if (response.ok) {
-                    this.resetRequestSuccess = 'Password reset instructions have been sent to your email';
-                    setTimeout(() => {
-                        this.authView = 'login';
-                        this.resetRequestSuccess = null;
-                    }, 3000);
-                } else {
-                    this.error = data.detail || 'Failed to request password reset';
-                }
-            } catch (err) {
-                this.error = 'An error occurred while requesting password reset';
-                console.error('Password reset request error:', err);
-            }
-        },
-
-        async verifyEmail(token) {
-            try {
-                const response = await fetch(`/api/v1/auth/verify-email?token=${token}`, {
-                    method: 'POST'
-                });
-                const data = await response.json();
-                if (response.ok) {
-                    this.error = null;
-                    alert('Email verified successfully! You can now log in.');
-                    // Remove token from URL without refreshing
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                } else {
-                    this.error = data.detail || 'Email verification failed';
-                }
-            } catch (err) {
-                this.error = 'An error occurred during email verification';
-                console.error('Email verification error:', err);
-            }
-        },
-
-        async validateToken(token) {
-            try {
-                const response = await fetch('/api/v1/auth/me', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-                if (response.ok) {
-                    this.isAuthenticated = true;
-                } else {
-                    localStorage.removeItem('token');
-                    this.isAuthenticated = false;
-                }
-            } catch (err) {
-                console.error('Token validation error:', err);
-                localStorage.removeItem('token');
-                this.isAuthenticated = false;
+            } finally {
+                Alpine.store('auth').isLoading = false;
             }
         },
 
         logout() {
-            localStorage.removeItem('token');
-            this.isAuthenticated = false;
-            this.form.email = '';
-            this.form.password = '';
-            this.authView = 'login';
+            Alpine.store('auth').clearAuthState();
         }
     }));
 });

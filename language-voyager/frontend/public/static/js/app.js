@@ -1,32 +1,56 @@
 document.addEventListener('alpine:init', () => {
     Alpine.data('app', () => ({
-        activeView: 'map',
+        activeView: localStorage.getItem('lastActiveView') || 'map',
+        isOffline: !navigator.onLine,
 
         init() {
-            // Listen for view changes
+            // Only update localStorage when view changes, and only if the change was triggered by user action
             this.$watch('activeView', (value) => {
-                if (value === 'map') {
-                    // Trigger map initialization/refresh
-                    window.dispatchEvent(new Event('map:refresh'));
+                if (value) {
+                    localStorage.setItem('lastActiveView', value);
+                    
+                    // Use requestAnimationFrame to prevent refresh loops when updating map
+                    if (value === 'map') {
+                        requestAnimationFrame(() => {
+                            window.dispatchEvent(new Event('map:refresh'));
+                        });
+                    }
                 }
             });
 
-            // Handle offline status
-            window.addEventListener('online', () => this.checkSync());
-            window.addEventListener('offline', () => this.handleOffline());
+            // Handle navigation clicks
+            document.querySelectorAll('[x-on\\:click]').forEach(el => {
+                if (el.getAttribute('x-on:click').includes('activeView =')) {
+                    el.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const view = el.getAttribute('data-view');
+                        if (view) {
+                            this.activeView = view;
+                        }
+                    });
+                }
+            });
+
+            // Handle online/offline status
+            window.addEventListener('online', () => {
+                this.isOffline = false;
+                this.checkSync();
+            });
+            
+            window.addEventListener('offline', () => {
+                this.isOffline = true;
+                this.handleOffline();
+            });
         },
 
         async checkSync() {
-            // Check if there are any pending sync items
             const pendingSync = JSON.parse(localStorage.getItem('pendingSync') || '[]');
             if (pendingSync.length > 0) {
-                // TODO: Implement sync logic
                 console.log('Syncing pending items:', pendingSync);
             }
         },
 
         handleOffline() {
-            // TODO: Show offline notification
             console.log('App is offline');
         }
     }));

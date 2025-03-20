@@ -246,6 +246,15 @@ export class ArcGISMapService {
     }
   }
 
+  refresh() {
+    if (this.view) {
+      this.view.goTo({
+        center: [this.TOKYO_CENTER.longitude, this.TOKYO_CENTER.latitude],
+        zoom: 12
+      });
+    }
+  }
+
   destroy() {
     if (this.view) {
       this.view.destroy();

@@ -20,6 +20,7 @@ from ..auth.utils import (
 )
 from ..core.config import get_settings
 from pydantic import BaseModel, EmailStr, ConfigDict
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -145,7 +146,35 @@ async def read_users_me(
     db: Annotated[Session, Depends(get_db)]
 ) -> UserResponse:
     """Get current user info"""
-    return current_user
+    try:
+        # Refresh the session if needed
+        db.refresh(current_user)
+        
+        # Using the current_user directly since it's already validated by the dependency
+        if not current_user.is_active:
+            logger.warning(f"Inactive user attempted access: {current_user.id}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User is inactive"
+            )
+        return current_user
+        
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in read_users_me: {str(e)}")
+        # Return 401 instead of 500 to trigger proper frontend auth handling
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in read_users_me: {str(e)}")
+        # Return 401 instead of 500 to trigger proper frontend auth handling
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed"
+        )
 
 @router.post("/verify-email")
 async def verify_email(token: str, db: Session = Depends(get_db)):

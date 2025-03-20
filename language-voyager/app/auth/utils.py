@@ -6,6 +6,7 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 from ..database.config import get_db
 from ..models.user import User
 from ..core.config import get_settings
@@ -55,29 +56,80 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    """Get current user from JWT token with enhanced error handling"""
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-    except ExpiredSignatureError:
-        raise HTTPException(
+        if not token:
+            logger.warning("Authentication attempt with no token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+            
+        credentials_exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired",
+            detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    except JWTError:
-        raise credentials_exception
-    
-    user = db.query(User).filter(User.email == email).first()
-    if user is None:
-        raise credentials_exception
-    return user
+        
+        try:
+            # Validate JWT token format and signature
+            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+            email: str = payload.get("sub")
+            if email is None:
+                logger.warning("JWT token missing 'sub' claim")
+                raise credentials_exception
+                
+        except ExpiredSignatureError:
+            logger.warning(f"Expired JWT token attempt for email: {email if 'email' in locals() else 'unknown'}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has expired",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        except JWTError as e:
+            logger.error(f"JWT validation error: {str(e)}")
+            raise credentials_exception
+            
+        try:
+            # Validate user exists and is active
+            if not db or not db.is_active:
+                logger.error("Invalid database session in get_current_user")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Database connection error"
+                )
+                
+            user = db.query(User).filter(User.email == email).first()
+            if user is None:
+                logger.warning(f"JWT token with non-existent user email: {email}")
+                raise credentials_exception
+                
+            if not user.is_active:
+                logger.warning(f"JWT token used for inactive user: {email}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="User account is inactive",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+                
+            return user
+            
+        except SQLAlchemyError as e:
+            logger.error(f"Database error in get_current_user: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database error occurred"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in get_current_user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during authentication"
+        )
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
     if not current_user.is_active:

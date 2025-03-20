@@ -1,17 +1,25 @@
 document.addEventListener('alpine:init', () => {
     Alpine.data('progress', () => ({
-        stats: null,
         loading: true,
         error: null,
+        progress: null,
+        achievements: [],
 
         init() {
-            this.loadProgress();
+            if (Alpine.store('auth').isAuthenticated) {
+                this.loadProgress();
+            }
         },
 
         async loadProgress() {
             try {
-                const token = localStorage.getItem('token');
-                if (!token) throw new Error('No authentication token');
+                const token = Alpine.store('auth').getToken();
+                if (!token) {
+                    throw new Error('No authentication token');
+                }
+
+                this.loading = true;
+                this.error = null;
 
                 const response = await fetch('/api/v1/progress', {
                     headers: {
@@ -19,34 +27,19 @@ document.addEventListener('alpine:init', () => {
                     }
                 });
 
-                if (response.ok) {
-                    const data = await response.json();
-                    this.stats = data;
-                    
-                    // Hide the loading placeholder
-                    document.getElementById('progress-placeholder').style.display = 'none';
-                    
-                    // Cache progress data for offline access
-                    localStorage.setItem('cached_progress', JSON.stringify(data));
-                } else {
+                if (!response.ok) {
                     throw new Error('Failed to load progress');
                 }
-            } catch (err) {
-                console.error('Progress loading error:', err);
-                this.error = 'Failed to load progress data';
-                
-                // Try to load cached data if offline
-                const cachedData = localStorage.getItem('cached_progress');
-                if (cachedData) {
-                    this.stats = JSON.parse(cachedData);
-                }
+
+                const data = await response.json();
+                this.progress = data.progress;
+                this.achievements = data.achievements || [];
+            } catch (error) {
+                console.error('Progress loading error:', error);
+                this.error = error.message;
             } finally {
                 this.loading = false;
             }
-        },
-
-        formatPercent(value) {
-            return `${Math.round(value * 100)}%`;
         }
     }));
 });

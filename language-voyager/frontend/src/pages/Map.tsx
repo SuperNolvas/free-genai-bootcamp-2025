@@ -1,23 +1,41 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import MapManager from '../services/arcgis';
 import { MapPin, Navigation } from 'lucide-react';
 
 export default function Map() {
-  const mapContainerRef = useRef<HTMLDivElement>(null);
   const [isTracking, setIsTracking] = useState(false);
   const [showControls, setShowControls] = useState(false);
   const [watchId, setWatchId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (mapContainerRef.current) {
-      MapManager.initialize(mapContainerRef.current)
-        .then(() => setIsLoading(false))
-        .catch((error) => {
-          console.error('Failed to initialize map:', error);
-          setIsLoading(false);
-        });
+    const mapContainer = document.getElementById('map-container');
+    if (!mapContainer) {
+      console.error('Map container not found');
+      return;
     }
+
+    const initializeMap = async () => {
+      try {
+        await MapManager.initialize(mapContainer);
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Failed to initialize map:', error);
+        setIsLoading(false);
+      }
+    };
+
+    initializeMap();
+
+    // Listen for map refresh events from Alpine.js
+    const handleMapRefresh = () => {
+      MapManager.refresh();
+    };
+    window.addEventListener('map:refresh', handleMapRefresh);
+
+    return () => {
+      window.removeEventListener('map:refresh', handleMapRefresh);
+    };
   }, []);
 
   const toggleTracking = () => {
@@ -29,21 +47,14 @@ export default function Map() {
       const id = navigator.geolocation.watchPosition(
         (position) => {
           MapManager.updateLocationMarker({
-            type: 'location_update',
-            status: 'ok',
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-            timestamp: new Date().toISOString()
+            accuracy: position.coords.accuracy
           });
         },
         (error) => {
-          console.error('Error getting location:', error);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 5000,
-          maximumAge: 0
+          console.error('Geolocation error:', error);
+          setIsTracking(false);
         }
       );
       setWatchId(id);
@@ -51,26 +62,14 @@ export default function Map() {
     }
   };
 
-  // Clean up geolocation watching when component unmounts
-  useEffect(() => {
-    return () => {
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-      }
-    };
-  }, [watchId]);
-
   return (
-    <div className="relative h-full w-full">
+    <>
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-75 z-10">
-          <div className="flex flex-col items-center space-y-4">
-            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-gray-700">Loading map...</p>
-          </div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-white bg-opacity-90 z-10">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-gray-700">Loading map...</p>
         </div>
       )}
-      <div ref={mapContainerRef} className="h-full w-full" />
       
       <div className="absolute bottom-4 right-4">
         <button
@@ -79,7 +78,6 @@ export default function Map() {
         >
           <MapPin className="h-4 w-4" />
         </button>
-
         {showControls && (
           <div className="absolute bottom-12 right-0 w-64 rounded-lg bg-white p-4 shadow-lg">
             <div className="mb-4">
@@ -88,7 +86,6 @@ export default function Map() {
                 {isTracking ? 'Your location is being tracked' : 'Location tracking is disabled'}
               </p>
             </div>
-
             <button
               onClick={toggleTracking}
               className={`w-full rounded-md px-4 py-2 text-sm font-medium text-white ${
@@ -114,6 +111,6 @@ export default function Map() {
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }
