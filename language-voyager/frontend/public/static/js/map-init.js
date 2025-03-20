@@ -283,7 +283,7 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
 
         async getLocationDetails(latitude, longitude) {
             try {
-                const response = await fetch(`/map/location/details?lat=${latitude}&lon=${longitude}`);
+                const response = await fetch(`/api/v1/map/location/details?lat=${latitude}&lon=${longitude}`);
                 if (!response.ok) {
                     throw new Error('Failed to fetch location details');
                 }

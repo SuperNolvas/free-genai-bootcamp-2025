@@ -80,8 +80,8 @@ app.add_middleware(
 # Include API routers with prefix
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(progress_router.router, prefix="/api/v1")
-app.include_router(map.router, prefix="/api/v1/map")
-app.include_router(conversation.router, prefix="/api/v1/conversation")
+app.include_router(map.router, prefix="/api/v1")  # Changed from "/api/v1/map"
+app.include_router(conversation.router, prefix="/api/v1")
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=str(frontend_path / "static")), name="static")
