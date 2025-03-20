@@ -356,8 +356,7 @@
                     this.updateLocation = (e) => {
                         console.log('Received location update:', e.detail);
                         const location = e.detail;
-                        const type = location.type.charAt(0).toUpperCase() + location.type.slice(1);
-                        this.currentLocation = `Current Location: ${type} near ${location.name}`;
+                        this.currentLocation = `Current location: ${location.name}`;
                         this.locationContext = {
                             poi_type: location.type,
                             lat: location.latitude,

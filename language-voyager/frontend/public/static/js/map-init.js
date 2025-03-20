@@ -153,15 +153,13 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
             // Get detailed location information
             const locationDetails = await this.getLocationDetails(location.latitude, location.longitude);
             
-            // Create location context without adding extra "near" prefix
+            // Create location context without prefixes
             const locationDetail = {
                 ...location,
                 type: poiType,
-                name: `${locationDetails.description}`,
+                name: locationDetails.description,
                 region: 'Tokyo'  // Default to Tokyo for now
             };
-
-            console.log('Notifying location change:', locationDetail);
 
             // Dispatch custom event for the chat interface
             window.dispatchEvent(new CustomEvent('location:updated', {
@@ -288,18 +286,14 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
                     throw new Error('Failed to fetch location details');
                 }
                 const data = await response.json();
-                return {
-                    ...data,
-                    // Remove any "near" prefix from the API description since we'll add location type
-                    description: data.description.replace(/^Near\s+/, '')
-                };
+                return data;
             } catch (error) {
                 console.warn('Error fetching location details:', error);
                 // Fallback to basic coordinate formatting
                 const lat = Math.abs(latitude).toFixed(4) + '°' + (latitude >= 0 ? 'N' : 'S');
                 const lon = Math.abs(longitude).toFixed(4) + '°' + (longitude >= 0 ? 'E' : 'W');
                 return {
-                    description: `${lat}, ${lon}`, // Remove "Near" since we'll add location type
+                    description: `${lat}, ${lon}`,
                     coordinates: `${lat}, ${lon}`
                 };
             }
