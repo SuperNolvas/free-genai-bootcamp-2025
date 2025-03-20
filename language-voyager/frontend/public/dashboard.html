@@ -24,12 +24,22 @@
             width: 100%;
             height: calc(100vh - 4rem);
             min-height: 400px;
+            position: relative;
         }
         .esri-view {
             width: 100%;
             height: 100%;
             padding: 0;
             margin: 0;
+        }
+        #map-overlay-container {
+            z-index: 1000;
+            pointer-events: none;  /* Make the entire overlay container transparent to pointer events */
+        }
+        /* Only enable pointer events for actual interactive elements within the overlay */
+        #map-overlay-container button,
+        #map-overlay-container .map-control {
+            pointer-events: auto;
         }
         [x-cloak] { display: none !important; }
     </style>
@@ -106,7 +116,22 @@
                     </div>
                 </div>
 
-                <div id="map-container" class="rounded-lg shadow-md h-full"></div>
+                <!-- Map Container with Overlay -->
+                <div class="relative rounded-lg shadow-md h-full">
+                    <div id="map-container" class="absolute inset-0"></div>
+                    <div id="map-overlay-container" class="absolute inset-0 pointer-events-none">
+                        <div class="pointer-events-auto"><!-- React components will be rendered here --></div>
+                    </div>
+                    <!-- Map Controls -->
+                    <div class="absolute bottom-4 left-0 right-0 flex justify-center z-10">
+                        <button 
+                            @click="window.MapManager.setRandomLocation()"
+                            class="bg-blue-500 text-white px-6 py-3 rounded-lg shadow-lg hover:bg-blue-600 font-medium"
+                        >
+                            Random Location
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- Progress View -->

@@ -57,13 +57,14 @@ export interface Region {
 export interface POI {
   id: string;
   name: string;
-  local_name: string;
+  local_name?: string;
   type: string;
   lat: number;
   lon: number;
   region_id: string;
   difficulty_level: number;
   available_content: string[];
+  properties?: Record<string, any>;
 }
 
 // WebSocket types
@@ -86,12 +87,19 @@ export interface LocationCoordinates {
 }
 
 export interface LocationUpdate {
-  type: 'location_update';
-  status: 'ok';
   latitude: number;
   longitude: number;
   accuracy?: number;
-  timestamp: string;
+  altitude?: number | null;
+  altitudeAccuracy?: number | null;
+  heading?: number | null;
+  speed?: number | null;
+  timestamp?: number;
+}
+
+export interface GeolocationError {
+  code: number;
+  message: string;
 }
 
 // API Response wrapper

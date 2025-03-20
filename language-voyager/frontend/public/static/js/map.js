@@ -34,6 +34,9 @@ document.addEventListener('alpine:init', () => {
                 await window.MapManager.initialize(mapContainer);
                 this.loading = false;
                 this.error = null;
+
+                // Dispatch event to notify React components that map is ready
+                window.dispatchEvent(new Event('map:ready'));
             } catch (error) {
                 console.error('Failed to initialize map:', error);
                 this.error = error.message || 'Failed to initialize map';

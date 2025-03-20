@@ -7,10 +7,10 @@ import { ArcGISMapService } from './services/arcgis';
 const MapManager = new ArcGISMapService();
 (window as any).MapManager = MapManager;
 
-// Initialize map components in the container provided by Alpine.js
-const mapContainer = document.getElementById('map-container');
-if (mapContainer) {
-  const root = ReactDOM.createRoot(mapContainer);
+// Initialize map components in the overlay container
+const overlayContainer = document.getElementById('map-overlay-container');
+if (overlayContainer) {
+  const root = ReactDOM.createRoot(overlayContainer);
   root.render(
     <React.StrictMode>
       <Map />

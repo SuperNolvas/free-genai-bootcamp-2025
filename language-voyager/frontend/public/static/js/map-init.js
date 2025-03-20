@@ -14,6 +14,12 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
                 latitude: 35.6762,
                 longitude: 139.6503
             };
+            this.TOKYO_BOUNDS = {
+                north: 35.8187,
+                south: 35.5311,
+                east: 139.9224,
+                west: 139.5804
+            };
         }
 
         async initialize(container) {
@@ -27,10 +33,33 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
                 container,
                 map: this.map,
                 center: [this.TOKYO_CENTER.longitude, this.TOKYO_CENTER.latitude],
-                zoom: 12
+                zoom: 12,
+                constraints: {
+                    geometry: {
+                        type: "extent",
+                        xmin: this.TOKYO_BOUNDS.west,
+                        ymin: this.TOKYO_BOUNDS.south,
+                        xmax: this.TOKYO_BOUNDS.east,
+                        ymax: this.TOKYO_BOUNDS.north,
+                        spatialReference: { wkid: 4326 }
+                    }
+                }
             });
 
-            // Create location marker symbol
+            await this.view.when();
+
+            // Initialize location marker with a random position
+            const initialLat = this.TOKYO_BOUNDS.south + 
+                (Math.random() * (this.TOKYO_BOUNDS.north - this.TOKYO_BOUNDS.south));
+            const initialLon = this.TOKYO_BOUNDS.west + 
+                (Math.random() * (this.TOKYO_BOUNDS.east - this.TOKYO_BOUNDS.west));
+
+            const point = new Point({
+                longitude: initialLon,
+                latitude: initialLat,
+                spatialReference: { wkid: 4326 }
+            });
+
             const locationSymbol = new SimpleMarkerSymbol({
                 color: '#2196f3',
                 outline: {
@@ -40,10 +69,11 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
                 size: 12
             });
 
-            // Initialize location marker (hidden initially)
             this.locationMarker = new Graphic({
+                geometry: point,
                 symbol: locationSymbol
             });
+            
             this.view.graphics.add(this.locationMarker);
 
             // Add Tokyo region boundary
@@ -52,15 +82,65 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
                 name: "Tokyo",
                 center_lat: this.TOKYO_CENTER.latitude,
                 center_lon: this.TOKYO_CENTER.longitude,
-                bounds: {
-                    north: 35.8187,
-                    south: 35.5311,
-                    east: 139.9224,
-                    west: 139.5804
-                }
+                bounds: this.TOKYO_BOUNDS
             });
 
+            // Set view to show the initial location
+            this.updateLocation(initialLat, initialLon);
+
             return this.view;
+        }
+
+        async setRandomLocation() {
+            const latitude = this.TOKYO_BOUNDS.south + 
+                (Math.random() * (this.TOKYO_BOUNDS.north - this.TOKYO_BOUNDS.south));
+            const longitude = this.TOKYO_BOUNDS.west + 
+                (Math.random() * (this.TOKYO_BOUNDS.east - this.TOKYO_BOUNDS.west));
+
+            this.updateLocationMarker({
+                latitude,
+                longitude,
+                accuracy: 10
+            });
+
+            return { latitude, longitude };
+        }
+
+        updateLocationMarker(location) {
+            if (!this.view || !location.latitude || !location.longitude) return;
+
+            const point = new Point({
+                longitude: location.longitude,
+                latitude: location.latitude,
+                spatialReference: { wkid: 4326 }
+            });
+
+            if (this.locationMarker) {
+                this.locationMarker.geometry = point;
+            }
+
+            this.updateLocation(location.latitude, location.longitude);
+            this.notifyLocationChange(location);
+        }
+
+        updateLocation(latitude, longitude) {
+            if (this.view) {
+                this.view.goTo({
+                    center: [longitude, latitude],
+                    zoom: 15
+                });
+            }
+        }
+
+        onLocationChange(listener) {
+            this.locationListeners.push(listener);
+            return () => {
+                this.locationListeners = this.locationListeners.filter(l => l !== listener);
+            };
+        }
+
+        notifyLocationChange(location) {
+            this.locationListeners.forEach(listener => listener(location));
         }
 
         async addRegionPolygon(region) {
@@ -101,12 +181,15 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
             this.view.graphics.add(graphic);
         }
 
-        updateLocation(latitude, longitude) {
+        clearAll() {
             if (this.view) {
-                this.view.goTo({
-                    center: [longitude, latitude],
-                    zoom: 15
-                });
+                this.view.graphics.removeAll();
+                this.poiMarkers.clear();
+                this.regionPolygons.clear();
+                
+                if (this.locationMarker) {
+                    this.view.graphics.add(this.locationMarker);
+                }
             }
         }
 

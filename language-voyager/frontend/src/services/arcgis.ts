@@ -30,10 +30,17 @@ export class ArcGISMapService {
   private regionPolygons = new Map<string, Graphic>();
   private locationListeners: LocationChangeListener[] = [];
 
-  // Tokyo coordinates
+  // Tokyo coordinates and bounds
   private TOKYO_CENTER = {
     latitude: 35.6762,
     longitude: 139.6503
+  };
+
+  private TOKYO_BOUNDS = {
+    north: 35.8187,
+    south: 35.5311,
+    east: 139.9224,
+    west: 139.5804
   };
 
   async initialize(container: HTMLDivElement) {
@@ -45,10 +52,33 @@ export class ArcGISMapService {
       container,
       map: this.map,
       center: [this.TOKYO_CENTER.longitude, this.TOKYO_CENTER.latitude],
-      zoom: 12
+      zoom: 12,
+      constraints: {
+        geometry: {
+          type: "extent",
+          xmin: this.TOKYO_BOUNDS.west,
+          ymin: this.TOKYO_BOUNDS.south,
+          xmax: this.TOKYO_BOUNDS.east,
+          ymax: this.TOKYO_BOUNDS.north,
+          spatialReference: { wkid: 4326 }
+        }
+      }
     });
 
-    // Create location marker symbol
+    await this.view.when(); // Wait for view to be ready
+
+    // Initialize location marker with a random position
+    const initialLat = this.TOKYO_BOUNDS.south + 
+      (Math.random() * (this.TOKYO_BOUNDS.north - this.TOKYO_BOUNDS.south));
+    const initialLon = this.TOKYO_BOUNDS.west + 
+      (Math.random() * (this.TOKYO_BOUNDS.east - this.TOKYO_BOUNDS.west));
+
+    const point = new Point({
+      longitude: initialLon,
+      latitude: initialLat,
+      spatialReference: { wkid: 4326 }
+    });
+
     const locationSymbol = new SimpleMarkerSymbol({
       color: '#2196f3',
       outline: {
@@ -58,27 +88,43 @@ export class ArcGISMapService {
       size: 12
     });
 
-    // Initialize location marker (hidden initially)
     this.locationMarker = new Graphic({
+      geometry: point,
       symbol: locationSymbol
     });
+    
     this.view.graphics.add(this.locationMarker);
 
     // Add Tokyo region boundary
-    this.addRegionPolygon({
+    await this.addRegionPolygon({
       id: "tokyo",
       name: "Tokyo",
       center_lat: this.TOKYO_CENTER.latitude,
       center_lon: this.TOKYO_CENTER.longitude,
-      bounds: {
-        north: 35.8187,
-        south: 35.5311,
-        east: 139.9224,
-        west: 139.5804
-      }
+      bounds: this.TOKYO_BOUNDS
     });
 
+    // Set view to show the initial location
+    this.updateLocation(initialLat, initialLon);
+
     return this.view;
+  }
+
+  async setRandomLocation() {
+    // Generate random coordinates within Tokyo bounds
+    const latitude = this.TOKYO_BOUNDS.south + 
+      (Math.random() * (this.TOKYO_BOUNDS.north - this.TOKYO_BOUNDS.south));
+    const longitude = this.TOKYO_BOUNDS.west + 
+      (Math.random() * (this.TOKYO_BOUNDS.east - this.TOKYO_BOUNDS.west));
+
+    // Update marker position
+    this.updateLocationMarker({
+      latitude,
+      longitude,
+      accuracy: 10
+    });
+
+    return { latitude, longitude };
   }
 
   onLocationChange(listener: LocationChangeListener) {
@@ -110,22 +156,7 @@ export class ArcGISMapService {
       spatialReference: { wkid: 4326 }
     });
 
-    if (!this.locationMarker) {
-      const symbol = new SimpleMarkerSymbol({
-        color: '#2196f3',
-        outline: {
-          color: '#ffffff',
-          width: 2
-        },
-        size: 12
-      });
-
-      this.locationMarker = new Graphic({
-        geometry: point,
-        symbol
-      });
-      this.view.graphics.add(this.locationMarker);
-    } else {
+    if (this.locationMarker) {
       this.locationMarker.geometry = point;
     }
 
