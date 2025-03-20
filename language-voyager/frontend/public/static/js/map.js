@@ -1,20 +1,10 @@
 document.addEventListener('alpine:init', () => {
+    // Remove the standalone map component since it's now part of mapView
     Alpine.data('map', () => ({
-        map: null,
         loading: true,
         error: null,
 
         async init() {
-            // Wait for auth to be ready
-            while (!this.$store.auth?.isAuthReady) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-
-            if (!this.$store.auth.isAuthenticated) {
-                window.location.href = '/';
-                return;
-            }
-
             try {
                 // Wait for ArcGIS to be loaded (it exposes the require function)
                 while (typeof require === 'undefined') {
@@ -35,7 +25,7 @@ document.addEventListener('alpine:init', () => {
                 this.loading = false;
                 this.error = null;
 
-                // Dispatch event to notify React components that map is ready
+                // Dispatch event to notify components that map is ready
                 window.dispatchEvent(new Event('map:ready'));
             } catch (error) {
                 console.error('Failed to initialize map:', error);

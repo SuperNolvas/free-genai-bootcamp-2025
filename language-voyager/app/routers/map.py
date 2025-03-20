@@ -1126,3 +1126,36 @@ async def rollback_content_version(
         message=f"Created rollback request to version {version}",
         data={"pending_changes": [c.id for c in poi.get_pending_changes()]}
     )
+
+@router.get("/location/details")
+async def get_location_details(
+    lat: float,
+    lon: float,
+    service: ArcGISService = Depends(get_arcgis_service)
+) -> Dict:
+    """Get detailed location information including street names and water bodies"""
+    result = await service.reverse_geocode_location(lat, lon)
+    
+    # Format response with street name or water body info
+    address = result.get('address', {})
+    features = result.get('features', [])
+    
+    location_info = {
+        'coordinates': f"{abs(lat):.4f}°{'N' if lat >= 0 else 'S'}, {abs(lon):.4f}°{'E' if lon >= 0 else 'W'}",
+        'street': address.get('Address') or address.get('Street'),
+        'neighborhood': address.get('Neighborhood') or address.get('District'),
+        'water_body': next((f.get('attributes', {}).get('Name') for f in features if f.get('attributes', {}).get('FeatureType') == 'WaterFeature'), None)
+    }
+
+    # Build descriptive text prioritizing the most specific location info
+    if location_info['water_body']:
+        description = location_info['water_body']
+    elif location_info['street']:
+        description = location_info['street']
+    elif location_info['neighborhood']:
+        description = location_info['neighborhood']
+    else:
+        description = location_info['coordinates']
+    
+    location_info['description'] = description
+    return location_info

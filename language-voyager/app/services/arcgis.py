@@ -619,3 +619,23 @@ class ArcGISService:
             'x': list(range(min_x, max_x + 1)),
             'y': list(range(min_y, max_y + 1))
         }
+
+    async def reverse_geocode_location(self, lat: float, lon: float) -> Dict:
+        """Get detailed location information including street names and water bodies
+        
+        Args:
+            lat: Latitude in decimal degrees
+            lon: Longitude in decimal degrees
+            
+        Returns:
+            Dict containing address and location features (streets, water bodies, etc.)
+        """
+        params = {
+            'f': 'json',
+            'location': f"{lon},{lat}",
+            'featureTypes': 'StreetAddress,PointAddress,WaterFeature',
+            'outFields': '*',
+            'returnIntersection': 'true',
+            'locationType': 'street'
+        }
+        return await self._make_request('reverseGeocode', params, 'geocoding')

@@ -7,7 +7,7 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
             this.map = null;
             this.view = null;
             this.locationMarker = null;
-            this.poiMarkers = new Map();
+            this.poiMarkers = new Map(); // This is a JavaScript Map
             this.regionPolygons = new Map();
             this.locationListeners = [];
             this.TOKYO_CENTER = {
@@ -88,6 +88,13 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
             // Set view to show the initial location
             this.updateLocation(initialLat, initialLon);
 
+            // Trigger initial location update using the API
+            await this.updateLocationMarker({
+                latitude: initialLat,
+                longitude: initialLon,
+                accuracy: 10
+            });
+
             return this.view;
         }
 
@@ -139,8 +146,80 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
             };
         }
 
-        notifyLocationChange(location) {
-            this.locationListeners.forEach(listener => listener(location));
+        async notifyLocationChange(location) {
+            // Get POI type based on current view extent
+            const poiType = this.determinePOIType(location);
+            
+            // Get detailed location information
+            const locationDetails = await this.getLocationDetails(location.latitude, location.longitude);
+            
+            // Create location context with properly formatted description
+            const locationDetail = {
+                ...location,
+                type: poiType,
+                name: `${poiType.charAt(0).toUpperCase() + poiType.slice(1)} near ${locationDetails.description}`,
+                region: 'Tokyo'  // Default to Tokyo for now
+            };
+
+            console.log('Notifying location change:', locationDetail);
+
+            // Dispatch custom event for the chat interface
+            window.dispatchEvent(new CustomEvent('location:updated', {
+                detail: locationDetail
+            }));
+
+            // Notify existing listeners
+            this.locationListeners.forEach(listener => listener(locationDetail));
+        }
+
+        determinePOIType(location) {
+            // Simple POI type detection based on map zoom and location
+            if (!this.view) return 'area';
+            
+            if (this.view.zoom >= 18) {
+                return 'building';
+            } else if (this.view.zoom >= 15) {
+                return 'street';
+            } else if (this.view.zoom >= 12) {
+                return 'neighborhood';
+            } else {
+                return 'area';
+            }
+        }
+
+        getLocationName(location) {
+            try {
+                // Format coordinates nicely
+                const lat = Math.abs(location.latitude).toFixed(4) + '°' + (location.latitude >= 0 ? 'N' : 'S');
+                const lon = Math.abs(location.longitude).toFixed(4) + '°' + (location.longitude >= 0 ? 'E' : 'W');
+                
+                // First check POI markers if we have any
+                if (this.poiMarkers.size > 0) {
+                    for (const [_, marker] of this.poiMarkers) {
+                        if (!marker?.geometry) continue;
+                        
+                        if (this.isNearby(location, {
+                            latitude: marker.geometry.latitude,
+                            longitude: marker.geometry.longitude
+                        })) {
+                            return marker.attributes?.name || `${lat}, ${lon}`;
+                        }
+                    }
+                }
+                
+                // If no POI is found, return formatted coordinates
+                return `${lat}, ${lon}`;
+            } catch (error) {
+                console.warn('Error checking POI markers:', error);
+                // Fallback to basic coordinate formatting
+                return `${location.latitude.toFixed(4)}°N, ${location.longitude.toFixed(4)}°E`;
+            }
+        }
+
+        isNearby(loc1, loc2, threshold = 0.001) { // roughly 100 meters
+            if (!loc1 || !loc2) return false;
+            return Math.abs(loc1.latitude - loc2.latitude) < threshold &&
+                   Math.abs(loc1.longitude - loc2.longitude) < threshold;
         }
 
         async addRegionPolygon(region) {
@@ -199,6 +278,30 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
                     center: [this.TOKYO_CENTER.longitude, this.TOKYO_CENTER.latitude],
                     zoom: 12
                 });
+            }
+        }
+
+        async getLocationDetails(latitude, longitude) {
+            try {
+                const response = await fetch(`/map/location/details?lat=${latitude}&lon=${longitude}`);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch location details');
+                }
+                const data = await response.json();
+                return {
+                    ...data,
+                    // Remove any "near" prefix from the API description since we'll add location type
+                    description: data.description.replace(/^Near\s+/, '')
+                };
+            } catch (error) {
+                console.warn('Error fetching location details:', error);
+                // Fallback to basic coordinate formatting
+                const lat = Math.abs(latitude).toFixed(4) + '°' + (latitude >= 0 ? 'N' : 'S');
+                const lon = Math.abs(longitude).toFixed(4) + '°' + (longitude >= 0 ? 'E' : 'W');
+                return {
+                    description: `${lat}, ${lon}`, // Remove "Near" since we'll add location type
+                    coordinates: `${lat}, ${lon}`
+                };
             }
         }
     }
