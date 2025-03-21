@@ -180,3 +180,183 @@ The system uses a microservices-inspired architecture while maintaining the simp
 - Robust data persistence
 - Optimized caching
 - Reliable LLM integration
+
+## LLM Integration Details
+
+### Language Learning Context Management
+
+The system uses OpenRouter API with context-aware prompting to create an intelligent language learning assistant. Here's how the different components work together:
+
+1. **Location-Aware Language Teaching**
+```mermaid
+graph TD
+    A[User Location] --> B[Context Builder]
+    C[POI Type] --> B
+    D[Formality Level] --> B
+    E[Dialect Settings] --> B
+    F[Difficulty Level] --> B
+    B --> G[System Prompt]
+    G --> H[OpenRouter API]
+    H --> I[Language Learning Response]
+```
+
+2. **System Prompt Structure**
+```
+You are a native {dialect} speaker helping someone learn the language. 
+Current location: {current_location.get('local_name', 'Unknown Location')}
+Location type: {poi_type}
+Speaking style: {formality}
+Difficulty level: {difficulty}/100
+
+Guidelines:
+- When asked about the current location, use the Japanese name: {current_location.get('local_name')}
+- Use appropriate formality for the location type
+- Stay in character as a native speaker
+- Maintain conversation difficulty around {difficulty}/100
+- Use {dialect} dialect features when appropriate
+- Natural conversations about this location type
+- Correct major language errors gently
+- Provide cultural context when relevant
+```
+
+3. **Context Parameters**
+   - **POI Type**: Location category (temple, station, restaurant, etc.)
+   - **Formality Level**: Adjusts language politeness based on location
+   - **Dialect**: Regional language variations
+   - **Difficulty**: Scale of 0-100 for language complexity
+   - **Location Details**: Both Japanese and romanized names
+   - **Custom Rules**: Location-specific cultural notes and customs
+
+4. **Response Characteristics**
+   - Culturally aware responses
+   - Gentle error correction
+   - Japanese-English code switching
+   - Progressive difficulty scaling
+   - Natural conversation flow
+   - Location-specific vocabulary
+   - Cultural context integration
+
+### System Prompt Building
+
+The system uses a sophisticated prompt building process in `app/services/openrouter.py` through the `_build_system_prompt` method. This method constructs context-aware prompts that guide the LLM's behavior:
+
+1. **Context Parameters**
+   ```python
+   def _build_system_prompt(self, context: Dict) -> str:
+       poi_type = context.get("poi_type", "location")
+       formality = context.get("formality_level", "neutral")
+       dialect = context.get("dialect", "standard")
+       difficulty = context.get("difficulty_level", 50)
+       current_location = context.get("current_location", {})
+   ```
+
+2. **Base Prompt Template**
+   ```text
+   You are a native {dialect} speaker helping someone learn the language. 
+   Current location: {current_location.get('local_name', 'Unknown Location')}
+   Location type: {poi_type}
+   Speaking style: {formality}
+   Difficulty level: {difficulty}/100
+
+   Guidelines:
+   - When asked about the current location, use the Japanese name: {current_location.get('local_name')}
+   - Use appropriate formality for the location type
+   - Stay in character as a native speaker
+   - Maintain conversation difficulty around {difficulty}/100
+   - Use {dialect} dialect features when appropriate
+   - Natural conversations about this location type
+   - Correct major language errors gently
+   - Provide cultural context when relevant
+   ```
+
+3. **Dynamic Custom Rules**
+   - Location-specific customs are added dynamically
+   - Each custom rule is formatted as "rule: description"
+   - Rules are specific to the current POI type and region
+
+4. **Validation**
+The system includes comprehensive testing (in `tests/services/test_openrouter.py`) to ensure:
+   - Proper formality levels
+   - Correct dialect inclusion
+   - Appropriate difficulty scaling
+   - Custom rules integration
+   - Location name handling
+
+This prompt structure enables:
+- Consistent teaching persona
+- Location-appropriate language
+- Progressive difficulty scaling
+- Cultural context integration
+- Natural conversation flow
+- Gentle error correction
+- Cultural awareness
+
+### Example Interaction
+
+Request:
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tell me about my current location"
+    }
+  ],
+  "context": {
+    "current_location": {
+      "local_name": "日本、〒120-0031 東京都足立区千住大川町３６−４",
+      "name": "36-4 Senju-Okawa-cho, Adachi City, Tokyo 120-0031, Japan",
+      "type": "area"
+    },
+    "poi_type": "residential_area",
+    "formality_level": "neutral",
+    "dialect": "standard",
+    "difficulty_level": 50
+  }
+}
+```
+
+Response Features:
+- Location introduction in both languages
+- Cultural term explanation (下町 - shitamachi)
+- Gentle language correction (Hi → こんにちは)
+- Progressive difficulty with new vocabulary
+- Cultural and geographical context
+- Natural conversation style
+
+### Implementation Components
+
+1. **OpenRouter Service** (`app/services/openrouter.py`)
+   - API interaction management
+   - Context building
+   - Response generation
+   - Error handling
+   - Rate limiting
+
+2. **Conversation Router** (`app/routers/conversation.py`)
+   - HTTP endpoint handling
+   - WebSocket support
+   - Session management
+   - Context validation
+
+3. **Location Integration** (`app/services/location_manager.py`)
+   - Real-time location tracking
+   - POI proximity detection
+   - Region awareness
+   - Cultural context mapping
+
+4. **Content Adaptation** (`app/services/recommendation.py`)
+   - Dynamic difficulty adjustment
+   - Content personalization
+   - Learning progress tracking
+   - Vocabulary management
+
+This LLM integration creates a unique language learning experience by:
+- Maintaining consistent teaching persona
+- Adapting to user's location context
+- Providing cultural insights
+- Offering progressive language difficulty
+- Supporting natural conversation flow
+- Integrating location-specific learning opportunities
+
+The system combines location awareness, cultural knowledge, and language pedagogy to create an immersive learning environment that adapts to the user's physical location and learning progress.
