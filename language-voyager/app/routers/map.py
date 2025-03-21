@@ -1142,12 +1142,15 @@ async def get_location_details(
     
     location_info = {
         'coordinates': f"{abs(lat):.4f}°{'N' if lat >= 0 else 'S'}, {abs(lon):.4f}°{'E' if lon >= 0 else 'W'}",
+        'name': address.get('Address', '').split(',')[0] or address.get('Street') or address.get('Neighborhood') or address.get('District'),
+        'local_name': address.get('LongLabel') or address.get('ShortLabel'),  # Japanese name from ArcGIS
         'description': address.get('Address') or address.get('Street') or address.get('Neighborhood') or address.get('District'),
+        'type': address.get('Addr_type') or 'area',
         'water_body': next((f.get('attributes', {}).get('Name') for f in features if f.get('attributes', {}).get('FeatureType') == 'WaterFeature'), None)
     }
     
     # If no address found, use coordinates
-    if not location_info['description']:
-        location_info['description'] = location_info['coordinates']
+    if not location_info['name']:
+        location_info['name'] = location_info['coordinates']
         
     return location_info

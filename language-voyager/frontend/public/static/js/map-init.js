@@ -10,6 +10,8 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
             this.poiMarkers = new Map(); // This is a JavaScript Map
             this.regionPolygons = new Map();
             this.locationListeners = [];
+            this.chatReady = false;
+            this.initialLocation = null;
             this.TOKYO_CENTER = {
                 latitude: 35.6762,
                 longitude: 139.6503
@@ -85,14 +87,16 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
                 bounds: this.TOKYO_BOUNDS
             });
 
-            // Set view to show the initial location
+            // Set view to show the initial location and get details
             this.updateLocation(initialLat, initialLon);
-
-            // Trigger initial location update using the API
-            await this.updateLocationMarker({
+            const initialDetails = await this.getLocationDetails(initialLat, initialLon);
+            
+            // Notify of initial location with details
+            await this.notifyLocationChange({
                 latitude: initialLat,
                 longitude: initialLon,
-                accuracy: 10
+                accuracy: 10,
+                ...initialDetails
             });
 
             return this.view;
@@ -104,7 +108,7 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
             const longitude = this.TOKYO_BOUNDS.west + 
                 (Math.random() * (this.TOKYO_BOUNDS.east - this.TOKYO_BOUNDS.west));
 
-            this.updateLocationMarker({
+            await this.updateLocationMarker({
                 latitude,
                 longitude,
                 accuracy: 10
@@ -113,7 +117,16 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
             return { latitude, longitude };
         }
 
-        updateLocationMarker(location) {
+        updateLocation(latitude, longitude) {
+            if (this.view) {
+                this.view.goTo({
+                    center: [longitude, latitude],
+                    zoom: 15
+                });
+            }
+        }
+
+        async updateLocationMarker(location) {
             if (!this.view || !location.latitude || !location.longitude) return;
 
             const point = new Point({
@@ -127,16 +140,15 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
             }
 
             this.updateLocation(location.latitude, location.longitude);
-            this.notifyLocationChange(location);
-        }
 
-        updateLocation(latitude, longitude) {
-            if (this.view) {
-                this.view.goTo({
-                    center: [longitude, latitude],
-                    zoom: 15
-                });
-            }
+            // Always fetch location details
+            const details = await this.getLocationDetails(location.latitude, location.longitude);
+            
+            // Notify of location change with the fetched details
+            await this.notifyLocationChange({
+                ...location,
+                ...details
+            });
         }
 
         onLocationChange(listener) {
@@ -147,19 +159,16 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
         }
 
         async notifyLocationChange(location) {
-            // Get POI type based on current view extent
-            const poiType = this.determinePOIType(location);
-            
-            // Get detailed location information
-            const locationDetails = await this.getLocationDetails(location.latitude, location.longitude);
-            
-            // Create location context without prefixes
+            // Ensure we have all required fields
             const locationDetail = {
                 ...location,
-                type: poiType,
-                name: locationDetails.description,
-                region: 'Tokyo'  // Default to Tokyo for now
+                type: location.type || this.determinePOIType(location),
+                region: 'Tokyo',
+                name: location.name
             };
+
+            // Log the location details being sent
+            console.log('Notifying location change:', locationDetail);
 
             // Dispatch custom event for the chat interface
             window.dispatchEvent(new CustomEvent('location:updated', {
@@ -171,7 +180,6 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
         }
 
         determinePOIType(location) {
-            // Adjusted zoom thresholds for better type detection
             if (!this.view) return 'area';
             
             if (this.view.zoom >= 19) {
@@ -209,7 +217,6 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
                 return `${lat}, ${lon}`;
             } catch (error) {
                 console.warn('Error checking POI markers:', error);
-                // Fallback to basic coordinate formatting
                 return `${location.latitude.toFixed(4)}°N, ${location.longitude.toFixed(4)}°E`;
             }
         }
@@ -218,6 +225,34 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
             if (!loc1 || !loc2) return false;
             return Math.abs(loc1.latitude - loc2.latitude) < threshold &&
                    Math.abs(loc1.longitude - loc2.longitude) < threshold;
+        }
+
+        async getLocationDetails(latitude, longitude) {
+            try {
+                console.log('Fetching location details for:', latitude, longitude);
+                const response = await fetch(`/api/v1/map/location/details?lat=${latitude}&lon=${longitude}`);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch location details');
+                }
+                const data = await response.json();
+                console.log('Got location details:', data);
+                
+                // Return the location details, ensuring we have the Japanese name
+                return {
+                    name: data.local_name || data.name,  // Prefer Japanese name
+                    description: data.description || '',
+                    type: data.type || this.determinePOIType({ latitude, longitude }),
+                    region_specific_customs: data.customs || {}
+                };
+            } catch (error) {
+                console.warn('Error fetching location details:', error);
+                return {
+                    name: this.getLocationName({ latitude, longitude }),
+                    description: '',
+                    type: this.determinePOIType({ latitude, longitude }),
+                    region_specific_customs: {}
+                };
+            }
         }
 
         async addRegionPolygon(region) {
@@ -276,26 +311,6 @@ require(['esri/Map', 'esri/views/MapView', 'esri/Graphic', 'esri/geometry/Point'
                     center: [this.TOKYO_CENTER.longitude, this.TOKYO_CENTER.latitude],
                     zoom: 12
                 });
-            }
-        }
-
-        async getLocationDetails(latitude, longitude) {
-            try {
-                const response = await fetch(`/api/v1/map/location/details?lat=${latitude}&lon=${longitude}`);
-                if (!response.ok) {
-                    throw new Error('Failed to fetch location details');
-                }
-                const data = await response.json();
-                return data;
-            } catch (error) {
-                console.warn('Error fetching location details:', error);
-                // Fallback to basic coordinate formatting
-                const lat = Math.abs(latitude).toFixed(4) + '°' + (latitude >= 0 ? 'N' : 'S');
-                const lon = Math.abs(longitude).toFixed(4) + '°' + (longitude >= 0 ? 'E' : 'W');
-                return {
-                    description: `${lat}, ${lon}`,
-                    coordinates: `${lat}, ${lon}`
-                };
             }
         }
     }

@@ -225,40 +225,38 @@
                 </div>
 
                 <!-- Chat Interface -->
-                <div id="chat-container">
-                    <div class="chat-context" x-text="currentLocation"></div>
-                    <div class="chat-messages" id="chat-messages">
-                        <!-- Messages will be rendered here -->
-                        <template x-for="message in messages" :key="message.id">
-                            <div class="chat-message" :class="message.role">
-                                <div class="message-content" x-text="message.content"></div>
-                            </div>
-                        </template>
-                        <!-- Loading indicator -->
-                        <div x-show="chatLoading" class="chat-message assistant">
-                            <div class="message-content">
-                                <span class="loading-dots">Thinking</span>
-                            </div>
+                <div id="chat-container" x-data="chat">
+                    <div class="bg-white rounded-lg shadow-md p-4">
+                        <div class="mb-4">
+                            <h3 class="text-lg font-medium" x-text="currentLocation || 'Chat'"></h3>
+                            <p class="text-sm text-gray-600" x-show="locationContext">
+                                <span x-text="locationContext?.type || 'area'"></span>
+                            </p>
                         </div>
-                    </div>
-                    <div class="chat-input-area">
-                        <input 
-                            type="text" 
-                            x-model="newMessage"
-                            @keyup.enter="sendMessage"
-                            :disabled="chatLoading"
-                            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            :class="{'opacity-50': chatLoading}"
-                            placeholder="Type your message here..."
-                        >
-                        <button 
-                            @click="sendMessage"
-                            :disabled="chatLoading"
-                            class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            :class="{'opacity-50': chatLoading}"
-                        >
-                            Send
-                        </button>
+                        
+                        <div class="space-y-4 mb-4 max-h-96 overflow-y-auto" id="messages">
+                            <template x-for="message in messages" :key="message.id">
+                                <div :class="message.role === 'user' ? 'bg-blue-100' : 'bg-gray-100'" class="p-3 rounded-lg">
+                                    <p x-text="message.content"></p>
+                                </div>
+                            </template>
+                        </div>
+
+                        <form @submit.prevent="sendMessage" class="flex gap-2">
+                            <input
+                                type="text"
+                                x-model="newMessage"
+                                class="flex-1 rounded-lg border border-gray-300 px-4 py-2"
+                                placeholder="Type your message..."
+                            >
+                            <button
+                                type="submit"
+                                class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600"
+                                :disabled="!newMessage"
+                            >
+                                Send
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>
@@ -297,6 +295,7 @@
     <script src="/static/js/progress.js"></script>
     <script src="/static/js/map-init.js"></script>
     <script src="/static/js/map.js"></script>
+    <script src="/static/js/chat.js"></script>
     
     <script>
         document.addEventListener('alpine:init', () => {
@@ -408,12 +407,13 @@
                         this.loading = false;
                         this.error = null;
 
-                        // Check for initial location
+                        // Get initial location details immediately after map initialization
                         if (window.MapManager.locationMarker) {
                             const marker = window.MapManager.locationMarker;
                             const point = marker.geometry;
                             if (point) {
-                                window.MapManager.notifyLocationChange({
+                                // Trigger initial location update with details fetch
+                                await window.MapManager.updateLocationMarker({
                                     latitude: point.latitude,
                                     longitude: point.longitude,
                                     accuracy: 10
@@ -512,6 +512,110 @@
                     } catch (error) {
                         this.error = 'Failed to load progress data';
                         this.loading = false;
+                    }
+                }
+            }));
+
+            Alpine.data('chat', () => ({
+                messages: [],
+                newMessage: '',
+                currentLocation: 'Loading location...',
+                locationContext: null,
+
+                async init() {
+                    console.log('Chat component initialized');
+                    
+                    // Listen for location updates from MapManager
+                    this.updateLocation = (e) => {
+                        console.log('Received location update:', e.detail);
+                        const location = e.detail;
+                        // Only update if we have valid location data
+                        if (location && location.name) {
+                            this.currentLocation = `Current location: ${location.name}`;
+                            this.locationContext = {
+                                type: location.type || 'area',
+                                lat: location.latitude,
+                                lng: location.longitude,
+                                name: location.name,
+                                region: location.region || 'Tokyo'
+                            };
+                        }
+                    };
+
+                    // Add event listener
+                    window.addEventListener('location:updated', this.updateLocation);
+                    
+                    // Dispatch event to notify that chat is ready for location updates
+                    window.dispatchEvent(new Event('chat:ready'));
+                },
+
+                destroy() {
+                    if (this.updateLocation) {
+                        window.removeEventListener('location:updated', this.updateLocation);
+                    }
+                },
+
+                async sendMessage() {
+                    if (!this.newMessage.trim()) return;
+                    
+                    const token = localStorage.getItem('token');
+                    const userMessage = this.newMessage.trim();
+                    
+                    // Add user message
+                    this.messages.push({
+                        id: Date.now(),
+                        role: 'user',
+                        content: userMessage
+                    });
+                    
+                    this.newMessage = '';
+
+                    try {
+                        const response = await fetch('/api/v1/conversation/chat', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({
+                                messages: [{
+                                    role: 'user',
+                                    content: userMessage
+                                }],
+                                context: {
+                                    poi_type: this.locationContext?.type || 'area',
+                                    formality_level: 'polite',
+                                    dialect: 'standard',
+                                    difficulty_level: 50,
+                                    region_specific_customs: {}
+                                }
+                            })
+                        });
+
+                        if (!response.ok) throw new Error('Failed to send message');
+                        
+                        const data = await response.json();
+                        
+                        // Add assistant's response
+                        this.messages.push({
+                            id: Date.now() + 1,
+                            role: 'assistant',
+                            content: data.data.message.content
+                        });
+
+                        // Scroll to bottom
+                        this.$nextTick(() => {
+                            const messagesContainer = document.getElementById('messages');
+                            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                        });
+                    } catch (error) {
+                        console.error('Chat error:', error);
+                        // Add error message
+                        this.messages.push({
+                            id: Date.now() + 1,
+                            role: 'assistant',
+                            content: 'Sorry, I encountered an error processing your message.'
+                        });
                     }
                 }
             }));
