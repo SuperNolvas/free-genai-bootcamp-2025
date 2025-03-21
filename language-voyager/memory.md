@@ -2489,3 +2489,111 @@ Next Steps:
 2. Add more Japanese-specific location context
 3. Enhance error recovery mechanisms
 4. Expand caching strategies
+
+## LLM Location Awareness Integration (March 21, 2025)
+
+### Location Data Flow & Integration
+We've successfully implemented location awareness in the LLM chat system with the following data flow:
+
+1. **Location Capture & Storage**
+   - Location details captured by ArcGISMapService in `map-init.js`
+   - Google Places API provides Japanese address (local_name)
+   - Location details cached to prevent redundant API calls
+   - Current location stored in LocationManager singleton
+
+2. **Frontend to Backend Flow**
+   - Location updates triggered by:
+     - Initial map load
+     - Random location changes
+     - Map marker movements
+   - Location event dispatched via `window.dispatchEvent(new CustomEvent('location:updated'))`
+   - Chat component receives location through event listener
+   - Location context included in every chat request:
+     ```json
+     {
+       "current_location": {
+         "name": "日本、〒xxx-xxxx ...",
+         "local_name": "日本、〒xxx-xxxx ...",
+         "type": "area",
+         "coordinates": {
+           "lat": xx.xxx,
+           "lng": xxx.xxx
+         }
+       }
+     }
+     ```
+
+3. **Backend Processing**
+   - LocationManager stores current location details
+   - Conversation router includes location in LLM context
+   - OpenRouterService formats system prompt with location context
+   - Location-aware prompts guide LLM responses
+
+4. **System Prompt Integration**
+   - Location context embedded in system prompt:
+     - Current location in Japanese
+     - Location type (area, street, building, etc.)
+     - Appropriate formality level
+     - Cultural context and customs
+   
+5. **Response Handling**
+   - LLM responses include:
+     - Location-aware greetings
+     - Proper use of Japanese address
+     - Local cultural context
+     - Geographic relevance
+   - Responses maintain consistent location awareness across conversations
+
+### Implementation Details
+
+1. **Frontend Components**
+   ```typescript
+   // Location Update Event Structure
+   {
+     detail: {
+       local_name: "日本、〒xxx-xxxx ...",  // Japanese address
+       name: "Japan, xxx-xxxx ...",        // Romanized/English address
+       type: "area",                       // Location type
+       latitude: xx.xxx,                   // Coordinates
+       longitude: xxx.xxx
+     }
+   }
+   ```
+
+2. **Location Manager**
+   - Singleton instance maintains current location state
+   - Updates propagated to all dependent services
+   - Caches location details to optimize API usage
+   - Provides consistent location context across the application
+
+3. **OpenRouter Integration**
+   - System prompt template includes location context
+   - Location-specific instructions for LLM responses
+   - Dynamic formality adjustment based on location type
+   - Cultural context integration based on region
+
+### Benefits & Features
+1. **Location Awareness**
+   - LLM understands current location context
+   - Provides geographically relevant responses
+   - Uses proper Japanese address format
+   - Maintains location context across conversation
+
+2. **Cultural Integration**
+   - Location-appropriate formality levels
+   - Region-specific customs and etiquette
+   - Local cultural context in responses
+   - Geographic-specific language usage
+
+3. **Performance Optimization**
+   - Location caching prevents redundant API calls
+   - Efficient event-based updates
+   - Minimal overhead in chat responses
+   - Smooth location transitions
+
+### Next Steps
+1. Enhance location-based cultural context
+2. Add more detailed region-specific information
+3. Implement location history for context
+4. Add location-based language difficulty adjustment
+5. Extend location-aware conversational patterns
