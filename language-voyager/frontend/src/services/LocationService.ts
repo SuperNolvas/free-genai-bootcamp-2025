@@ -18,6 +18,7 @@ export class LocationService {
     private lastPosition: GeolocationPosition | null = null;
     private onLocationUpdate?: (position: GeolocationPosition) => void;
     private onError?: (error: GeolocationError) => void;
+    private currentLocationDetails: any = null;
 
     constructor() {
         this.ws = new WebSocketService('/api/v1/map/ws/location');
@@ -86,6 +87,16 @@ export class LocationService {
         this.onError = callback;
     }
 
+    private async updateLocationDetails(latitude: number, longitude: number): Promise<void> {
+        const details = await this.getLocationDetails(latitude, longitude);
+        this.currentLocationDetails = details;
+        this.notifyLocationChange({
+            latitude,
+            longitude,
+            ...details
+        });
+    }
+
     private handlePositionUpdate(position: GeolocationPosition): void {
         // Don't send updates if accuracy is worse than minAccuracy
         if (position.coords.accuracy > this.config.minAccuracy) {
@@ -126,6 +137,8 @@ export class LocationService {
         if (this.onLocationUpdate) {
             this.onLocationUpdate(position);
         }
+
+        this.updateLocationDetails(position.coords.latitude, position.coords.longitude);
     }
 
     private handleError(error: GeolocationPositionError): void {
@@ -179,5 +192,9 @@ export class LocationService {
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
         return R * c; // Distance in meters
+    }
+
+    public getCurrentLocationDetails(): any {
+        return this.currentLocationDetails;
     }
 }

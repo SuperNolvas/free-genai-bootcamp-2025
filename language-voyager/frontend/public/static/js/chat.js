@@ -7,7 +7,7 @@ document.addEventListener('alpine:init', () => {
         loading: false,
 
         init() {
-            // Listen for location updates from MapManager
+            console.log('Chat component initialized');
             window.addEventListener('location:updated', this.handleLocationUpdate.bind(this));
         },
 
@@ -17,26 +17,18 @@ document.addEventListener('alpine:init', () => {
 
         handleLocationUpdate(event) {
             const location = event.detail;
-            this.currentLocation = `${location.type}: ${location.name}`;
+            console.log('Chat handling location update:', location);
+            
+            this.currentLocation = location.local_name || location.name;
             this.locationContext = {
-                poi_type: location.type,
-                formality_level: 'polite',
-                dialect: 'standard',
-                difficulty_level: 50,
-                region_specific_customs: {},
-                location_name: location.name,
+                name: location.name,
+                local_name: location.local_name,
+                type: location.type || 'area',
                 coordinates: {
                     lat: location.latitude,
                     lng: location.longitude
                 }
             };
-
-            // Add system message about new location
-            this.messages.push({
-                id: Date.now(),
-                role: 'system',
-                content: `Location changed to: ${location.name} (${location.type})`
-            });
         },
 
         async sendMessage() {
@@ -44,49 +36,72 @@ document.addEventListener('alpine:init', () => {
             
             const token = localStorage.getItem('token');
             const userMessage = this.newMessage.trim();
+            const timestamp = new Date().toISOString();
             
             // Add user message
-            this.messages.push({
+            const userMsg = {
                 id: Date.now(),
                 role: 'user',
-                content: userMessage
-            });
+                content: userMessage,
+                timestamp: timestamp
+            };
             
+            this.messages.push(userMsg);
             this.newMessage = '';
             this.loading = true;
 
             try {
+                // Construct request payload according to server schema
+                const payload = {
+                    messages: [userMsg],
+                    context: {
+                        poi_type: this.locationContext?.type || 'area',
+                        formality_level: 'polite',
+                        dialect: 'standard',
+                        difficulty_level: 50,
+                        region_specific_customs: {},
+                        current_location: {
+                            name: this.locationContext?.name,
+                            local_name: this.locationContext?.local_name,
+                            type: this.locationContext?.type || 'area',
+                            coordinates: this.locationContext?.coordinates
+                        }
+                    }
+                };
+
+                console.log('Sending chat request:', JSON.stringify(payload, null, 2));
+
                 const response = await fetch('/api/v1/conversation/chat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({
-                        messages: [{
-                            role: 'user',
-                            content: userMessage
-                        }],
-                        context: this.locationContext || {
-                            poi_type: 'area',
-                            formality_level: 'polite',
-                            dialect: 'standard',
-                            difficulty_level: 50,
-                            region_specific_customs: {}
-                        }
-                    })
+                    body: JSON.stringify(payload)
                 });
 
-                if (!response.ok) throw new Error('Failed to send message');
-                
-                const data = await response.json();
-                
-                // Add assistant's response
-                this.messages.push({
-                    id: Date.now() + 1,
-                    role: 'assistant',
-                    content: data.data.message.content
-                });
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.statusText}`);
+                }
+
+                const responseData = await response.json();
+                console.log('Server response:', responseData);
+
+                if (!responseData.success) {
+                    throw new Error(responseData.message);
+                }
+
+                // Add assistant's response using the new response format
+                if (responseData.data && responseData.data.message) {
+                    this.messages.push({
+                        id: Date.now() + 1,
+                        role: responseData.data.message.role,
+                        content: responseData.data.message.content,
+                        timestamp: responseData.data.message.timestamp || new Date().toISOString()
+                    });
+                } else {
+                    throw new Error('Invalid response format from server');
+                }
 
                 // Scroll to bottom
                 this.$nextTick(() => {
@@ -100,7 +115,8 @@ document.addEventListener('alpine:init', () => {
                 this.messages.push({
                     id: Date.now() + 1,
                     role: 'system',
-                    content: 'Sorry, I encountered an error processing your message.'
+                    content: `Error: ${error.message}`,
+                    timestamp: new Date().toISOString()
                 });
             } finally {
                 this.loading = false;

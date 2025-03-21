@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
     
+    # Google Places
+    GOOGLE_PLACES_API_KEY: Optional[str] = None
+    
     # ArcGIS
     ARCGIS_API_KEY: Optional[str] = None
     ARCGIS_MAX_CREDITS_PER_DAY: float = 10.0

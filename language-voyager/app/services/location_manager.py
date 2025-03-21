@@ -27,6 +27,7 @@ class LocationManager:
     def __init__(self):
         self.state = LocationState()
         self._cleanup_task = None
+        self.current_location_details = None
     
     async def start(self):
         """Start background tasks"""
@@ -162,5 +163,11 @@ class LocationManager:
                 logger.error(f"Error in periodic cleanup: {e}")
             
             await asyncio.sleep(60)  # Run cleanup every minute
+
+    def update_current_location_details(self, details):
+        self.current_location_details = details
+
+    def get_current_location_details(self):
+        return self.current_location_details
 
 location_manager = LocationManager()

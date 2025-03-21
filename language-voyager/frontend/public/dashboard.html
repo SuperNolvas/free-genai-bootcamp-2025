@@ -244,9 +244,9 @@
                 <div id="chat-container" x-data="chat">
                     <div class="h-full flex flex-col bg-white rounded-lg shadow-md">
                         <div class="p-4 border-b border-gray-200">
-                            <h3 class="text-lg font-medium" x-text="currentLocation || 'Chat'"></h3>
+                            <h3 class="text-lg font-medium" x-text="'Current location: ' + (currentLocation || 'Loading...')"></h3>
                             <p class="text-sm text-gray-600" x-show="locationContext">
-                                <span x-text="locationContext?.type || 'area'"></span>
+                                <span x-text="locationContext?.poi_type || 'area'"></span>
                             </p>
                         </div>
                         
@@ -355,14 +355,8 @@
             }));
 
             Alpine.data('mapView', () => ({
-                messages: [],
-                newMessage: '',
-                currentLocation: 'Loading location...',
-                locationContext: null,
-                chatLoading: false,
                 loading: true,
                 error: null,
-                map: null,
 
                 async init() {
                     console.log('MapView component initialized');
@@ -371,12 +365,14 @@
                     this.updateLocation = (e) => {
                         console.log('Received location update:', e.detail);
                         const location = e.detail;
-                        this.currentLocation = `Current location: ${location.name}`;
+                        // Prioritize local_name (Japanese) then fallback to name, never show coordinates directly
+                        this.currentLocation = location.local_name || location.name || 'Unknown';
                         this.locationContext = {
                             poi_type: location.type,
                             lat: location.latitude,
                             lng: location.longitude,
                             name: location.name,
+                            local_name: location.local_name,
                             region: location.region
                         };
                     };
@@ -528,110 +524,6 @@
                     } catch (error) {
                         this.error = 'Failed to load progress data';
                         this.loading = false;
-                    }
-                }
-            }));
-
-            Alpine.data('chat', () => ({
-                messages: [],
-                newMessage: '',
-                currentLocation: 'Loading location...',
-                locationContext: null,
-
-                async init() {
-                    console.log('Chat component initialized');
-                    
-                    // Listen for location updates from MapManager
-                    this.updateLocation = (e) => {
-                        console.log('Received location update:', e.detail);
-                        const location = e.detail;
-                        // Only update if we have valid location data
-                        if (location && location.name) {
-                            this.currentLocation = `Current location: ${location.name}`;
-                            this.locationContext = {
-                                type: location.type || 'area',
-                                lat: location.latitude,
-                                lng: location.longitude,
-                                name: location.name,
-                                region: location.region || 'Tokyo'
-                            };
-                        }
-                    };
-
-                    // Add event listener
-                    window.addEventListener('location:updated', this.updateLocation);
-                    
-                    // Dispatch event to notify that chat is ready for location updates
-                    window.dispatchEvent(new Event('chat:ready'));
-                },
-
-                destroy() {
-                    if (this.updateLocation) {
-                        window.removeEventListener('location:updated', this.updateLocation);
-                    }
-                },
-
-                async sendMessage() {
-                    if (!this.newMessage.trim()) return;
-                    
-                    const token = localStorage.getItem('token');
-                    const userMessage = this.newMessage.trim();
-                    
-                    // Add user message
-                    this.messages.push({
-                        id: Date.now(),
-                        role: 'user',
-                        content: userMessage
-                    });
-                    
-                    this.newMessage = '';
-
-                    try {
-                        const response = await fetch('/api/v1/conversation/chat', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            },
-                            body: JSON.stringify({
-                                messages: [{
-                                    role: 'user',
-                                    content: userMessage
-                                }],
-                                context: {
-                                    poi_type: this.locationContext?.type || 'area',
-                                    formality_level: 'polite',
-                                    dialect: 'standard',
-                                    difficulty_level: 50,
-                                    region_specific_customs: {}
-                                }
-                            })
-                        });
-
-                        if (!response.ok) throw new Error('Failed to send message');
-                        
-                        const data = await response.json();
-                        
-                        // Add assistant's response
-                        this.messages.push({
-                            id: Date.now() + 1,
-                            role: 'assistant',
-                            content: data.data.message.content
-                        });
-
-                        // Scroll to bottom
-                        this.$nextTick(() => {
-                            const messagesContainer = document.getElementById('messages');
-                            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                        });
-                    } catch (error) {
-                        console.error('Chat error:', error);
-                        // Add error message
-                        this.messages.push({
-                            id: Date.now() + 1,
-                            role: 'assistant',
-                            content: 'Sorry, I encountered an error processing your message.'
-                        });
                     }
                 }
             }));

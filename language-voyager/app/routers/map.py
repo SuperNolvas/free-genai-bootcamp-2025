@@ -8,6 +8,7 @@ import logging
 from starlette.websockets import WebSocketState  # Add this import
 from ..database.config import get_db, SessionLocal
 from ..services.arcgis import ArcGISService
+from ..services.google_places import GooglePlacesService  # Add this import
 from ..auth.utils import get_current_active_user
 from ..models.user import User
 from ..models.region import Region
@@ -21,6 +22,7 @@ from ..services.recommendation import ContentRecommender
 from ..services.websocket import manager, LocationUpdate
 from ..services.offline_maps import OfflineMapService
 from ..services.location_manager import location_manager
+from ..models.arcgis_usage import ArcGISUsage
 import asyncio
 from ..auth.websocket_auth import authenticate_websocket_user
 
@@ -33,6 +35,13 @@ router = APIRouter(
 
 # Rate limiting configuration
 LOCATION_UPDATE_MIN_INTERVAL = 1.0  # seconds
+
+class UsageStatistics(BaseModel):
+    daily_credits_used: float
+    daily_credits_limit: float
+    daily_credits_percentage: float
+    monthly_operations: Dict[str, Dict[str, float]]
+    alerts: Dict[str, Dict[str, str]]
 
 async def get_arcgis_service(db: Session = Depends(get_db)) -> ArcGISService:
     try:
@@ -1127,26 +1136,31 @@ async def rollback_content_version(
         data={"pending_changes": [c.id for c in poi.get_pending_changes()]}
     )
 
+async def get_google_places_service() -> GooglePlacesService:
+    try:
+        return GooglePlacesService()
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
 @router.get("/location/details")
 async def get_location_details(
     lat: float,
     lon: float,
-    service: ArcGISService = Depends(get_arcgis_service)
+    google_service: GooglePlacesService = Depends(get_google_places_service)
 ) -> Dict:
-    """Get detailed location information including street names and water bodies"""
-    result = await service.reverse_geocode_location(lat, lon)
+    """Get detailed location information including street names"""
+    result = await google_service.reverse_geocode_location(lat, lon)
     
-    # Format response with street name or water body info
+    # Format response with street name info
     address = result.get('address', {})
     features = result.get('features', [])
     
     location_info = {
         'coordinates': f"{abs(lat):.4f}°{'N' if lat >= 0 else 'S'}, {abs(lon):.4f}°{'E' if lon >= 0 else 'W'}",
         'name': address.get('Address', '').split(',')[0] or address.get('Street') or address.get('Neighborhood') or address.get('District'),
-        'local_name': address.get('LongLabel') or address.get('ShortLabel'),  # Japanese name from ArcGIS
+        'local_name': address.get('LongLabel') or address.get('ShortLabel'),  # Japanese name from Google Places
         'description': address.get('Address') or address.get('Street') or address.get('Neighborhood') or address.get('District'),
-        'type': address.get('Addr_type') or 'area',
-        'water_body': next((f.get('attributes', {}).get('Name') for f in features if f.get('attributes', {}).get('FeatureType') == 'WaterFeature'), None)
+        'type': address.get('Addr_type') or 'area'
     }
     
     # If no address found, use coordinates
@@ -1154,3 +1168,85 @@ async def get_location_details(
         location_info['name'] = location_info['coordinates']
         
     return location_info
+
+@router.get("/arcgis/usage", response_model=ResponseModel)
+async def get_arcgis_usage_metrics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> ResponseModel:
+    """Get current ArcGIS API usage metrics (admin only)"""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized to view API usage metrics")
+    
+    metrics = ArcGISUsage.get_usage_metrics(db)
+    daily_usage = ArcGISUsage.get_daily_usage(db)
+    
+    return ResponseModel(
+        success=True,
+        message="ArcGIS usage metrics retrieved successfully",
+        data={
+            "metrics_by_operation": metrics,
+            "daily_credits_used": daily_usage,
+            "daily_credit_limit": settings.ARCGIS_MAX_CREDITS_PER_DAY
+        }
+    )
+
+# Add new endpoint to get ArcGIS usage statistics
+@router.get("/arcgis-usage", response_model=ResponseModel[UsageStatistics])
+async def get_arcgis_usage_statistics(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> ResponseModel[UsageStatistics]:
+    """Get current ArcGIS usage statistics and rate limit alerts"""
+    from ..core.config import get_settings
+    settings = get_settings()
+    
+    # Get daily credit usage
+    daily_credits = ArcGISUsage.get_daily_usage(db)
+    daily_limit = settings.ARCGIS_MAX_CREDITS_PER_DAY
+    daily_percentage = (daily_credits / daily_limit) * 100 if daily_limit > 0 else 0
+    
+    # Get monthly operation counts and limits by operation type
+    monthly_operations = {}
+    operation_types = ["geocoding", "routing", "tile_request", "feature_request", 
+                      "place_search", "place_details", "elevation"]
+    
+    for op_type in operation_types:
+        count = ArcGISUsage.get_monthly_count(db, op_type)
+        limit = ArcGISUsage.get_monthly_limit(op_type)
+        percentage = (count / limit) * 100 if limit > 0 else 0
+        
+        monthly_operations[op_type] = {
+            "count": count,
+            "limit": limit,
+            "percentage": percentage
+        }
+    
+    # Get current alerts from Redis cache
+    import redis
+    import json
+    redis_client = redis.from_url(settings.REDIS_URL)
+    current_month = datetime.now().strftime('%Y-%m')
+    
+    alerts = {}
+    for op_type in operation_types:
+        alert_key = f"arcgis:alert:{op_type}:{current_month}"
+        cached_alert = redis_client.get(alert_key)
+        
+        if cached_alert:
+            try:
+                alert_data = json.loads(cached_alert)
+                alerts[op_type] = alert_data
+            except json.JSONDecodeError:
+                pass
+    
+    # Create response
+    usage_stats = UsageStatistics(
+        daily_credits_used=daily_credits,
+        daily_credits_limit=daily_limit,
+        daily_credits_percentage=daily_percentage,
+        monthly_operations=monthly_operations,
+        alerts=alerts
+    )
+    
+    return ResponseModel(data=usage_stats)

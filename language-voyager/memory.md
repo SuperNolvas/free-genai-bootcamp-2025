@@ -2413,3 +2413,79 @@ frontend/
    - Improve error messaging
 
 *Note: Map integration successful with proper error handling and loading states. Ready to proceed with location-based features and game mechanics implementation.*
+
+## Front-End Integration Progress (March 21, 2025)
+
+### Map Service Architecture Update
+We've successfully implemented a dual-provider approach for mapping services:
+
+1. **Google Places API Integration**
+   - Added for accurate Japanese place name resolution
+   - Endpoint: `GET /api/v1/map/location/details`
+   - Features:
+     - Reverse geocoding with Japanese language priority
+     - Returns both romanized and Japanese place names
+     - Handles street, neighborhood, and district levels
+     - Fallback to coordinate-based names when needed
+
+2. **ArcGIS Integration**
+   - Handles core mapping functionality
+   - Key endpoints implemented:
+     - Region Management
+       - `GET /api/v1/map/regions` - List available regions
+       - `GET /api/v1/map/region/{region_id}/pois` - Get POIs in region
+       - `GET /api/v1/map/pois/nearby` - Find POIs within radius
+       - `GET /api/v1/map/regions/nearby` - Find nearby regions
+     
+     - Navigation
+       - `GET /api/v1/map/route` - Get route between points
+       - `POST /api/v1/map/regions/route` - Find optimal route in region
+     
+     - Location Services
+       - `GET /api/v1/map/location/search` - Geocoding search
+       - `GET /api/v1/map/geofence/check` - Check geofence containment
+     
+     - Analytics
+       - `GET /api/v1/map/regions/{region_id}/analytics` - Region analytics
+       - `GET /api/v1/map/arcgis-usage` - Usage statistics
+
+### Service Separation Benefits
+1. **Reliability**
+   - Each service operates independently
+   - Map functionality preserved if one service hits rate limits
+   - Fallback mechanisms implemented for both services
+
+2. **Optimization**
+   - Google Places: Optimized for Japanese place names
+   - ArcGIS: Optimized for map visualization and spatial features
+   - Caching implemented for both services
+
+3. **User Experience**
+   - Seamless integration in frontend
+   - Automatic fallback to coordinate display if services unavailable
+   - Cached results prevent unnecessary API calls
+
+### Implementation Details
+1. **Frontend Components**
+   - ArcGISMapService class handles map visualization
+   - Location updates trigger parallel queries to both services
+   - Smart caching system with proximity-based reuse
+   - Rate limiting and exponential backoff implemented
+
+2. **Backend Integration**
+   - Separate service classes for each provider
+   - Common interface for location data
+   - Efficient error handling and fallback strategies
+   - Redis caching for high-traffic endpoints
+
+3. **Performance Optimizations**
+   - Implemented nearby location caching
+   - Batch geocoding requests where possible
+   - Intelligent cache invalidation
+   - Response compression for map tiles
+
+Next Steps:
+1. Implement offline support for frequently visited areas
+2. Add more Japanese-specific location context
+3. Enhance error recovery mechanisms
+4. Expand caching strategies

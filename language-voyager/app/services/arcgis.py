@@ -636,6 +636,25 @@ class ArcGISService:
             'featureTypes': 'StreetAddress,PointAddress,WaterFeature',
             'outFields': '*',
             'returnIntersection': 'true',
-            'locationType': 'street'
+            'locationType': 'street',
+            'langCode': 'ja',  # Request Japanese language
+            'preferredLabelValues': ['JPN', 'COMMON'],  # Prefer Japanese labels, fallback to common names
+            'forStorage': 'false'
         }
-        return await self._make_request('reverseGeocode', params, 'geocoding')
+
+        # Make request without checking usage limits or caching
+        base_url = "https://geocode-api.arcgis.com/arcgis/rest/services/World/GeocodeServer"
+        params['token'] = self.api_key
+        session = aiohttp.ClientSession()
+        try:
+            url = f"{base_url}/reverseGeocode"
+            response = await session.get(url, params=params)
+            if response.status != 200:
+                raise HTTPException(
+                    status_code=response.status,
+                    detail=f"ArcGIS API request failed: {url}"
+                )
+            result = await response.json()
+            return result
+        finally:
+            await session.close()

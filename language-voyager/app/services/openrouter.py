@@ -5,6 +5,8 @@ import json
 import logging
 import os
 from ..core.config import get_settings
+from pydantic import BaseModel
+from fastapi.encoders import jsonable_encoder
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -18,16 +20,18 @@ class OpenRouterService:
         self.api_key = settings.OPENROUTER_API_KEY
         self.default_model = settings.LLM_MODEL or "anthropic/claude-2"  # Use configured model or fallback
         
-        # Debug logging for initialization
-        logger.debug(f"Environment OPENROUTER_API_KEY exists: {os.getenv('OPENROUTER_API_KEY') is not None}")
-        logger.debug(f"Settings API key exists: {self.api_key is not None}")
-        logger.debug(f"Settings model: {self.default_model}")
-        
         if not self.api_key:
             logger.error("OpenRouter API key not found in environment variables")
             raise ValueError("OPENROUTER_API_KEY environment variable is required")
         
         logger.info(f"OpenRouter service initialized with model: {self.default_model}")
+
+    def _serialize_messages(self, messages: List[Dict[str, str] | BaseModel]) -> List[Dict[str, str]]:
+        """Serialize messages to JSON-compatible format"""
+        return [
+            jsonable_encoder(msg) if isinstance(msg, BaseModel) else msg
+            for msg in messages
+        ]
 
     async def _make_request(self, endpoint: str, data: Dict) -> Dict:
         """Make authenticated request to OpenRouter API"""
@@ -88,7 +92,20 @@ class OpenRouterService:
             "content": self._build_system_prompt(context)
         }
         
-        all_messages = [system_msg] + messages
+        # Ensure messages are in the correct format
+        formatted_messages = []
+        for msg in messages:
+            if isinstance(msg, dict):
+                formatted_msg = {
+                    "role": msg.get("role", "user"),
+                    "content": msg.get("content", "")
+                }
+                formatted_messages.append(formatted_msg)
+            else:
+                formatted_msg = jsonable_encoder(msg)
+                formatted_messages.append(formatted_msg)
+        
+        all_messages = [system_msg] + formatted_messages
         
         data = {
             "model": model or self.default_model,
@@ -97,7 +114,24 @@ class OpenRouterService:
             "max_tokens": 1000,
         }
         
-        return await self._make_request("chat/completions", data)
+        try:
+            response = await self._make_request("chat/completions", data)
+            
+            # Ensure response is in the expected format
+            if not response or "choices" not in response or not response["choices"]:
+                raise ValueError("Invalid response format from OpenRouter API")
+            
+            assistant_message = response["choices"][0]["message"]
+            return {
+                "message": {
+                    "role": "assistant",
+                    "content": assistant_message["content"],
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error in generate_conversation: {str(e)}")
+            raise
 
     def _build_system_prompt(self, context: Dict) -> str:
         """Build system prompt with relevant context"""
@@ -105,13 +139,16 @@ class OpenRouterService:
         formality = context.get("formality_level", "neutral")
         dialect = context.get("dialect", "standard")
         difficulty = context.get("difficulty_level", 50)
+        current_location = context.get("current_location", {})
         
         prompt = f"""You are a native {dialect} speaker helping someone learn the language. 
-Current location: {poi_type}
+Current location: {current_location.get('local_name', 'Unknown Location')}
+Location type: {poi_type}
 Speaking style: {formality}
 Difficulty level: {difficulty}/100
 
 Guidelines:
+- When asked about the current location, use the Japanese name: {current_location.get('local_name')}
 - Use appropriate formality for the location type
 - Stay in character as a native speaker
 - Maintain conversation difficulty around {difficulty}/100
