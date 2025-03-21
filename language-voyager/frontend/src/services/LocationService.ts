@@ -1,4 +1,5 @@
 import { WebSocketService } from './WebSocketService';
+import { LocationUpdate } from '../types/api';
 
 export interface GeolocationConfig {
     highAccuracyMode: boolean;
@@ -11,6 +12,11 @@ export interface GeolocationConfig {
     powerSaveMode: boolean;
 }
 
+export interface GeolocationError {
+    code: number;
+    message: string;
+}
+
 export class LocationService {
     private ws: WebSocketService;
     private watchId: number | null = null;
@@ -19,6 +25,7 @@ export class LocationService {
     private onLocationUpdate?: (position: GeolocationPosition) => void;
     private onError?: (error: GeolocationError) => void;
     private currentLocationDetails: any = null;
+    private locationChangeListeners: ((location: LocationUpdate) => void)[] = [];
 
     constructor() {
         this.ws = new WebSocketService('/api/v1/map/ws/location');
@@ -196,5 +203,22 @@ export class LocationService {
 
     public getCurrentLocationDetails(): any {
         return this.currentLocationDetails;
+    }
+
+    private async getLocationDetails(latitude: number, longitude: number): Promise<any> {
+        try {
+            const response = await fetch(`/api/v1/map/location/details?lat=${latitude}&lon=${longitude}`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch location details');
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching location details:', error);
+            return null;
+        }
+    }
+
+    private notifyLocationChange(location: LocationUpdate): void {
+        this.locationChangeListeners.forEach(listener => listener(location));
     }
 }

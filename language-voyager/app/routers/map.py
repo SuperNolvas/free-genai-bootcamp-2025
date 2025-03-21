@@ -23,8 +23,11 @@ from ..services.websocket import manager, LocationUpdate
 from ..services.offline_maps import OfflineMapService
 from ..services.location_manager import location_manager
 from ..models.arcgis_usage import ArcGISUsage
+from ..core.config import get_settings
 import asyncio
 from ..auth.websocket_auth import authenticate_websocket_user
+
+settings = get_settings()
 
 logger = logging.getLogger(__name__)
 
