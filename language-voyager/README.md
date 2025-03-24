@@ -2,6 +2,19 @@
 
 **Concept:** A game where players "travel" through a country or region using ArcGIS maps to learn the local language through location-specific vocabulary, cultural contexts, and interactive conversations.
 
+## Current Implementation Status
+
+The project currently has:
+- ✅ Full-featured backend with FastAPI
+- ✅ Basic frontend with login functionality
+- ✅ Tokyo region mapping with bounded exploration
+- ✅ Random user placement within Tokyo
+- ✅ Random Location button functionality
+- ✅ Location-aware chat system with LLM integration
+- ✅ Real-time location updates
+
+Features marked with ⏳ in this document are planned for future implementation.
+
 ## Core Gameplay
 
 Players navigate a detailed ArcGIS map of their target language's country (e.g., Japan for Japanese learners). As they explore, they encounter:
@@ -10,6 +23,122 @@ Players navigate a detailed ArcGIS map of their target language's country (e.g.,
 2. **Conversation simulations** with virtual locals using the LLM
 3. **Cultural missions** that combine language learning with cultural knowledge
 4. **Progressive difficulty** as players "unlock" new regions
+
+## Getting Started
+
+### Prerequisites
+- Docker and Docker Compose
+- Python 3.10 or higher (for local development only)
+- Node.js 16 or higher with npm (for frontend development and building)
+
+### Setup Instructions
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd language-voyager
+```
+
+2. Create and configure environment variables:
+```bash
+cp .env.example .env
+
+Edit .env and enter your keys for 
+
+ARCGISARCGIS_API_KEY
+OPENROUTER_API_KEY
+GOOGLE_PLACES_API_KEY
+
+ArcGIS API Key setup (This provides the rendered mapping for this project)
+
+To create an ArcGIS API Key go to this link and under the section Steps / Create an API key credential
+select ArcGIS Location platform tab and follow the 3 step guide to creating an API key
+
+https://developers.arcgis.com/documentation/security-and-authentication/api-key-authentication/tutorials/create-an-api-key/
+
+For OpenRouter API key setup (This provides LLM model access for this project )
+
+Creat an Openrouter account then go to https://openrouter.ai/settings/keys and create an API key here. It will automatically get access to free LLM models, the model we are using (google/gemma-3-27b-it:free) is already set in the .env file and has been tested working with this project. You are free to set any other model on OpenRouter but bear in mind not all are free and will require credits to use, just make sure to use the copy button next to the model name to copy the exact correct model name if you decide to choose a different model.
+
+For Google Place API key setup (This provides geo reversed location naming in Japanese for this project). This was implemented as it has a more generous location resolving credit than ArcGIS
+
+https://developers.google.com/maps/documentation/places/web-service/get-api-key
+
+```
+
+3. Build the containers first:
+```bash
+docker compose build
+```
+
+4. Start the services:
+```bash
+docker compose up -d
+```
+
+5. Verify the setup:
+
+Check if the API is running and database is connected
+
+Open a web browser and go to (you can also use curl and this URL endpoint in the terminal)
+
+http://localhost:8000/health
+
+Expected response:
+```json
+{
+    "status": "online",
+    "database": "healthy",
+    "arcgis": "healthy",
+    "version": "api/v1"
+}
+```
+
+6. Build the frontend:
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+7. Go to Login screen 
+
+http://localhost:8000
+
+**Test Login Credentials:** (these are currently hardcoded in conftest.py, will be removed once full user creation has been tested)
+
+Email: test@example.com
+
+Password: testpass123
+
+### Container Structure
+
+The application uses Docker health checks to ensure services are properly initialized:
+- Database: PostgreSQL database service with health checks
+- Cache: Redis cache service with health checks  
+- Web API: FastAPI service that waits for dependent services
+
+You can monitor container health & status using:
+```bash
+docker compose ps
+```
+
+Example output:
+```
+NAME                       IMAGE                  COMMAND                  SERVICE   CREATED      STATUS                   PORTS
+language-voyager-db-1      postgres:15            "docker-entrypoint.s…"   db        3 days ago   Up 2 minutes (healthy)   5432/tcp
+language-voyager-redis-1   redis:7                "docker-entrypoint.s…"   redis     3 days ago   Up 2 minutes (healthy)   0.0.0.0:6379->6379/tcp
+language-voyager-web-1     language-voyager-web   "uvicorn app.main:ap…"   web       2 days ago   Up 2 minutes             0.0.0.0:8000->8000/tcp
+```
+As the .env is setup in development mode you can see the FastAPI endpoints and schemas at the following URLs
+
+SwaggerUI
+
+http://localhost:8000/api/docs
+
+ReDoc
+
+http://localhost:8000/api/redoc
 
 ## Technical Architecture
 
@@ -74,35 +203,30 @@ flowchart TD
 
 ## Core Features
 
-### 1. Geographic Exploration
+### 1. Geographic Exploration ✅
+- ArcGIS map navigation within bounded Tokyo region
+- Random placement within Tokyo bounds
+- "Random Location" button for quick movement
 
-- Players use the ArcGIS map to navigate virtual Japan (or target country)
-- Detailed 3D buildings and landmarks in major cities
-- "Fog of war" revealing new areas as progress is made
+### 2. Contextual Language Learning ⏳
+- Location-aware conversations with the LLM
+- Cultural notes for specific areas (planned)
+- Region-specific vocabulary sets (planned)
 
-### 2. Contextual Language Learning
+### 3. AI-Powered Interactions ✅
+- Location-aware LLM conversations
+- Dynamic conversation context based on current position
+- Appropriate formality levels based on location type
 
-- Vocabulary tied to location types (train stations, restaurants, parks)
-- Phrases useful for specific contexts (ordering food, asking directions)
-- Cultural notes embedded in map locations
+### 4. Progression System ⏳
+- Region-based achievement system (planned)
+- Unlockable areas based on language proficiency (planned)
+- Progress tracking and statistics (planned)
 
-### 3. AI-Powered Interactions
-
-- LLM creates virtual locals with different personalities and speech patterns
-- Conversation simulations adapt to player's proficiency
-- Role-playing scenarios (ordering food, asking for directions)
-
-### 4. Progression System
-
-- "Language passport" tracking mastered vocabulary and grammar
-- Unlockable regions requiring specific language skills
-- Achievements for cultural knowledge and language milestones
-
-### 5. Multiplayer Elements
-
-- Optional cooperative challenges with other learners
-- Language exchange matching with native speakers
-- Shared goals for community exploration
+### 5. Multiplayer Elements ⏳
+- Cooperative challenges with other learners (planned)
+- Language exchange matching (planned)
+- Shared exploration goals (planned)
 
 ## Implementation Considerations
 
@@ -121,7 +245,78 @@ flowchart TD
 
 # ArcGIS Integration in Language Voyager
 
-ArcGIS mapping is not just a visual backdrop but a fundamental gameplay mechanism in Language Voyager. Here's how the mapping system becomes intrinsic to the language learning experience:
+## Current Implementation Status
+
+The following features are currently implemented:
+- ✅ Basic map visualization with ArcGIS JavaScript SDK
+- ✅ Tokyo region boundary with geofencing
+- ✅ Random location placement within bounds
+- ✅ Real-time location updates
+- ✅ Location-aware LLM conversations
+- ✅ Basic POI interaction system
+
+### Tokyo Region Configuration
+```javascript
+// Current bounds configuration
+TOKYO_BOUNDS = {
+    north: 35.8187,
+    south: 35.5311,
+    east: 139.9224,
+    west: 139.5804
+}
+
+// Center point
+TOKYO_CENTER = {
+    latitude: 35.6762,
+    longitude: 139.6503
+}
+```
+
+### LLM Integration Features
+- Location-aware conversation context
+- Dynamic formality adjustment based on location type
+- Support for both Japanese and English place names
+- Real-time location updates in chat context
+
+Future planned features:
+- ⏳ Multiple region support
+- ⏳ Advanced POI interaction system
+- ⏳ Cultural context integration
+- ⏳ Region-specific achievements
+- ⏳ Offline map support
+
+## Current LLM Conversation Features
+
+The chat system is currently implemented with the following features:
+
+### Location Awareness
+- Real-time location context updates when moving
+- Both Japanese (local_name) and English place names included
+- Location type detection (area, street, building, etc.)
+- Formality adjustment based on location context
+
+### Chat Interface
+- Connected to OpenRouter API (google/gemma-3-27b-it:free model)
+- Real-time location updates during conversation
+- Maintains conversation history within session
+- Simple text-based interaction
+
+### Language Learning Rules
+The LLM follows these core rules:
+- Maintains appropriate formality based on location type
+- Acts as a native Japanese speaker
+- Provides gentle correction of language errors
+- Includes cultural context when relevant
+- Keeps conversations natural and location-appropriate
+
+### Example Usage
+1. Log in using the test credentials provided above
+2. Navigate to any location in Tokyo using the map
+3. Use the "Random Location" button to explore different areas
+4. The chat system will maintain awareness of your current location
+5. Ask questions about your surroundings or practice conversations
+
+Note: Additional features like achievements, progress tracking, and region unlocking will be implemented in future updates.
 
 ## Map-Driven Game Logic
 
@@ -174,7 +369,7 @@ def determine_language_content(user_position, user_proficiency):
 
     return {
         "vocabulary": vocabulary_set,
-        "dialect": dialect_settings,
+        "dialect": settings,
         "formality": formality_level,
         "cultural_notes": get_cultural_context(location_data)
     }
@@ -390,79 +585,6 @@ This flowchart illustrates the complete logic flow of the Language Voyager game.
 - Player progress is continuously synchronized with map access
 
 This comprehensive logic flow ensures that the geographic context directly shapes the language learning experience, making map interaction an integral part of the educational process rather than just a visual element.
-
-## Getting Started
-
-### Prerequisites
-- Docker and Docker Compose
-- Python 3.10 or higher
-- PostgreSQL 15
-- Redis 7
-
-### Setup Instructions
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd language-voyager
-```
-
-2. Create and configure environment variables:
-```bash
-cp .env.example .env
-# Edit .env with your configuration
-```
-
-3. Start the services using Docker Compose:
-```bash
-docker compose up -d
-```
-
-4. Verify the setup:
-```bash
-# Check if the API is running and database is connected
-curl http://localhost:8000/health
-
-# Expected response:
-{
-    "status": "online",
-    "database": "healthy"
-}
-```
-
-### Development Setup
-
-If you want to run the application locally for development:
-
-1. Create a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows use: .\venv\Scripts\activate
-```
-
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-3. Start the application:
-```bash
-uvicorn app.main:app --reload
-```
-
-T
-
-### Container Health Checks
-
-The application uses Docker health checks to ensure services are properly initialized:
-- PostgreSQL: Checks database readiness
-- Redis: Verifies cache service availability
-- Web API: Waits for dependent services before starting
-
-You can monitor container health status using:
-```bash
-docker compose ps
-```
 
 --- 
 
