@@ -250,12 +250,24 @@
                             </p>
                         </div>
                         
-                        <div id="messages" class="flex-1 overflow-y-auto p-4 space-y-4">
-                            <template x-for="message in messages" :key="message.id">
-                                <div :class="message.role === 'user' ? 'bg-blue-100' : 'bg-gray-100'" class="p-3 rounded-lg">
-                                    <p x-text="message.content"></p>
+                        <div id="messages" class="flex-1 overflow-y-auto p-4">
+                            <div class="space-y-4">
+                                <template x-for="message in messages" :key="message.id">
+                                    <div :class="message.role === 'user' ? 'bg-blue-100' : 'bg-gray-100'" class="p-3 rounded-lg">
+                                        <p x-text="message.content"></p>
+                                    </div>
+                                </template>
+                                <!-- Loading indicator -->
+                                <div x-cloak x-show="chatLoading" 
+                                    class="flex items-center space-x-2 p-3 bg-gray-100 rounded-lg"
+                                    x-transition:enter="transition ease-out duration-300"
+                                    x-transition:enter-start="opacity-0 transform translate-y-4"
+                                    x-transition:enter-end="opacity-100 transform translate-y-0">
+                                    <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                                    <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                                    <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
                                 </div>
-                            </template>
+                            </div>
                         </div>
 
                         <form @submit.prevent="sendMessage" class="p-4 border-t border-gray-200 flex gap-2">
@@ -440,25 +452,72 @@
                         this.error = error.message || 'Failed to initialize map';
                         this.loading = false;
                     }
+                }
+            }));
+
+            Alpine.data('chat', () => ({
+                messages: [],
+                newMessage: '',
+                currentLocation: null,
+                locationContext: null,
+                chatLoading: false,
+
+                init() {
+                    console.log('Chat component initialized');
+                    window.addEventListener('location:updated', this.handleLocationUpdate.bind(this));
                 },
 
-                async sendMessage() {
-                    if (!this.newMessage.trim() || this.chatLoading) return;
+                destroy() {
+                    window.removeEventListener('location:updated', this.handleLocationUpdate.bind(this));
+                },
+
+                handleLocationUpdate(event) {
+                    const location = event.detail;
+                    console.log('Chat handling location update:', location);
                     
-                    const token = localStorage.getItem('token');
-                    const userMessage = this.newMessage.trim();
-                    
-                    // Add user message
-                    this.messages.push({
-                        id: Date.now(),
-                        role: 'user',
-                        content: userMessage
-                    });
-                    
-                    this.newMessage = '';
-                    this.chatLoading = true;
+                    this.currentLocation = location.local_name || location.name;
+                    this.locationContext = {
+                        name: location.name,
+                        local_name: location.local_name,
+                        type: location.type || 'area',
+                        coordinates: {
+                            lat: location.latitude,
+                            lng: location.longitude
+                        }
+                    };
+                },
+
+                    scrollToBottom() {
+                        this.$nextTick(() => {
+                            const messagesContainer = document.getElementById('messages');
+                            if (messagesContainer) {
+                                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                            }
+                        });
+                    },
+
+                    async sendMessage() {
+                        if (!this.newMessage.trim() || this.chatLoading) return;
+                        
+                        const token = localStorage.getItem('token');
+                        const userMessage = this.newMessage.trim();
+                        const timestamp = new Date().toISOString();
+                        
+                        // Add user message
+                        const userMsg = {
+                            id: Date.now(),
+                            role: 'user',
+                            content: userMessage,
+                            timestamp
+                        };
+                        
+                        this.messages.push(userMsg);
+                        this.newMessage = '';
+                        this.chatLoading = true;
+                        this.scrollToBottom(); // Scroll after user message
 
                     try {
+                        console.log('Sending chat request...');
                         const response = await fetch('/api/v1/conversation/chat', {
                             method: 'POST',
                             headers: {
@@ -466,16 +525,14 @@
                                 'Authorization': `Bearer ${token}`
                             },
                             body: JSON.stringify({
-                                messages: [{
-                                    role: 'user',
-                                    content: userMessage
-                                }],
+                                messages: [userMsg],
                                 context: {
-                                    poi_type: this.locationContext?.poi_type || 'area',
+                                    poi_type: this.locationContext?.type || 'area',
                                     formality_level: 'polite',
                                     dialect: 'standard',
                                     difficulty_level: 50,
-                                    region_specific_customs: {}
+                                    region_specific_customs: {},
+                                    current_location: this.locationContext
                                 }
                             })
                         });
@@ -483,27 +540,26 @@
                         if (!response.ok) throw new Error('Failed to send message');
                         
                         const data = await response.json();
-                        
+                        console.log('Server response:', data);
+
                         // Add assistant's response
                         this.messages.push({
                             id: Date.now() + 1,
                             role: 'assistant',
-                            content: data.data.message.content
+                            content: data.data.message.content,
+                            timestamp: data.data.message.timestamp || new Date().toISOString()
                         });
 
-                        // Scroll to bottom
-                        this.$nextTick(() => {
-                            const chatMessages = document.getElementById('chat-messages');
-                            chatMessages.scrollTop = chatMessages.scrollHeight;
-                        });
+                            this.scrollToBottom(); // Scroll after assistant response
                     } catch (error) {
                         console.error('Chat error:', error);
-                        // Add error message
                         this.messages.push({
                             id: Date.now() + 1,
-                            role: 'assistant',
-                            content: 'Sorry, I encountered an error processing your message.'
+                            role: 'system',
+                            content: `Error: ${error.message}`,
+                            timestamp: new Date().toISOString()
                         });
+                        this.scrollToBottom(); // Scroll after error message
                     } finally {
                         this.chatLoading = false;
                     }

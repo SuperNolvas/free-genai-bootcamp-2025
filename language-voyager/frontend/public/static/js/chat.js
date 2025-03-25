@@ -4,7 +4,7 @@ document.addEventListener('alpine:init', () => {
         newMessage: '',
         currentLocation: null,
         locationContext: null,
-        loading: false,
+        chatLoading: false,
 
         init() {
             console.log('Chat component initialized');
@@ -32,7 +32,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         async sendMessage() {
-            if (!this.newMessage.trim() || this.loading) return;
+            if (!this.newMessage.trim() || this.chatLoading) return;
             
             const token = localStorage.getItem('token');
             const userMessage = this.newMessage.trim();
@@ -48,7 +48,7 @@ document.addEventListener('alpine:init', () => {
             
             this.messages.push(userMsg);
             this.newMessage = '';
-            this.loading = true;
+            this.chatLoading = true;
 
             try {
                 // Construct request payload according to server schema
@@ -119,7 +119,7 @@ document.addEventListener('alpine:init', () => {
                     timestamp: new Date().toISOString()
                 });
             } finally {
-                this.loading = false;
+                this.chatLoading = false;
             }
         }
     }));

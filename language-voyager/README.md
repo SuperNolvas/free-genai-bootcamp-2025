@@ -1,5 +1,7 @@
 # Language Voyager: Geo-Immersive Language Learning
 
+![Project Demo](screenshots/Demo.gif)
+
 **Concept:** A game where players "travel" through a country or region using ArcGIS maps to learn the local language through location-specific vocabulary, cultural contexts, and interactive conversations.
 
 ## Current Implementation Status
@@ -34,82 +36,79 @@ Players navigate a detailed ArcGIS map of their target language's country (e.g.,
 ### Setup Instructions
 
 1. Clone the repository:
-```bash
-git clone <repository-url>
-cd language-voyager
-```
+   ```bash
+   git clone <repository-url>
+   cd language-voyager
+   ```
 
 2. Create and configure environment variables:
-```bash
-cp .env.example .env
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Configure your API keys in the .env file:
+   ```
+   ARCGISARCGIS_API_KEY  # Must be enclosed in quotes ("")
+   OPENROUTER_API_KEY
+   GOOGLE_PLACES_API_KEY
+   ```
 
-Edit .env and enter your keys for 
+   **IMPORTANT!:** The ARCGISARCGIS_API_KEY must be enclosed in quotes, while the other keys do not require quotes.
 
-ARCGISARCGIS_API_KEY
-OPENROUTER_API_KEY
-GOOGLE_PLACES_API_KEY
+   API Key Setup Instructions:
 
-ArcGIS API Key setup (This provides the rendered mapping for this project)
+    ArcGIS API Key
+      - Go to [ArcGIS API Key Creation](https://developers.arcgis.com/documentation/security-and-authentication/api-key-authentication/tutorials/create-an-api-key/)
+      - Follow the 3-step guide under "Create an API key credential"
+      - Select "ArcGIS Location Services" platform tab
+      - This key provides the rendered mapping for the project
+   
+    OpenRouter API Key
+      - Go to [OpenRouter Keys](https://openrouter.ai/settings/keys)
+      - Create an account and generate an API key
+      - Free access to LLM models included
+      - Default model: google/gemma-3-27b-it:free
+      - Other models available (may require credits)
+   
+   Google Places API Key
+      - Go to [Google Places API](https://developers.google.com/maps/documentation/places/web-service/get-api-key)
+      - Used for Japanese location naming
+      - Offers more generous location resolving credits than ArcGIS
 
-To create an ArcGIS API Key go to this link and under the section Steps / Create an API key credential
-select ArcGIS Location platform tab and follow the 3 step guide to creating an API key
 
-https://developers.arcgis.com/documentation/security-and-authentication/api-key-authentication/tutorials/create-an-api-key/
+3. Build and start the containers:
+   ```bash
+   docker compose build
+   docker compose up -d
+   ```
 
-For OpenRouter API key setup (This provides LLM model access for this project )
+4. Verify the setup:
+   - Open `http://localhost:8000/health` in your browser
+   - Expected response:
+     ```json
+     {
+         "status": "online",
+         "database": "healthy",
+         "arcgis": "healthy",
+         "version": "api/v1"
+     }
+     ```
 
-Creat an Openrouter account then go to https://openrouter.ai/settings/keys and create an API key here. It will automatically get access to free LLM models, the model we are using (google/gemma-3-27b-it:free) is already set in the .env file and has been tested working with this project. You are free to set any other model on OpenRouter but bear in mind not all are free and will require credits to use, just make sure to use the copy button next to the model name to copy the exact correct model name if you decide to choose a different model.
+5. Build the frontend:
+   ```bash
+   cd frontend
+   npm install
+   npm run build
+   ```
 
-For Google Place API key setup (This provides geo reversed location naming in Japanese for this project). This was implemented as it has a more generous location resolving credit than ArcGIS
-
-https://developers.google.com/maps/documentation/places/web-service/get-api-key
-
-```
-
-3. Build the containers first:
-```bash
-docker compose build
-```
-
-4. Start the services:
-```bash
-docker compose up -d
-```
-
-5. Verify the setup:
-
-Check if the API is running and database is connected
-
-Open a web browser and go to (you can also use curl and this URL endpoint in the terminal)
-
-http://localhost:8000/health
-
-Expected response:
-```json
-{
-    "status": "online",
-    "database": "healthy",
-    "arcgis": "healthy",
-    "version": "api/v1"
-}
-```
-
-6. Build the frontend:
-```bash
-cd frontend
-npm install
-npm run build
-```
-
-7. Go to Login screen 
-
-http://localhost:8000
-
-**Test Login Credentials:** (these are currently hardcoded in conftest.py, will be removed once full user creation has been tested)
-
-Email: test@example.com
-
-Password: testpass123
+6. Access the application:
+   - Go to `http://localhost:8000`
+   - Use the test credentials:
+     ```
+     Email: test@example.com
+     Password: testpass123
+     ```
+   Note: These credentials are temporary and will be removed once user creation is implemented.
 
 ### Container Structure
 
@@ -130,15 +129,17 @@ language-voyager-db-1      postgres:15            "docker-entrypoint.s…"   db 
 language-voyager-redis-1   redis:7                "docker-entrypoint.s…"   redis     3 days ago   Up 2 minutes (healthy)   0.0.0.0:6379->6379/tcp
 language-voyager-web-1     language-voyager-web   "uvicorn app.main:ap…"   web       2 days ago   Up 2 minutes             0.0.0.0:8000->8000/tcp
 ```
-As the .env is setup in development mode you can see the FastAPI endpoints and schemas at the following URLs
+### Development API Documentation
 
-SwaggerUI
+When running in development mode, you can access the API documentation at:
 
-http://localhost:8000/api/docs
+1. **SwaggerUI**
+   - URL: `http://localhost:8000/api/docs`
+   - Interactive API documentation and testing
 
-ReDoc
-
-http://localhost:8000/api/redoc
+2. **ReDoc**
+   - URL: `http://localhost:8000/api/redoc`
+   - Detailed API schema and reference
 
 ## Technical Architecture
 

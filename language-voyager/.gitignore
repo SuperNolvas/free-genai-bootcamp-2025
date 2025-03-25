@@ -71,3 +71,17 @@ dump.rdb
 # System
 .DS_Store
 Thumbs.db
+
+# Images and Media
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.mp4
+*.webm
+*.webp
+
+# But allow screenshots
+!screenshots/
+!screenshots/*.png
+!screenshots/*.gif
