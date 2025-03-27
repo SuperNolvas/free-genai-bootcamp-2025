@@ -129,6 +129,53 @@ language-voyager-db-1      postgres:15            "docker-entrypoint.s…"   db 
 language-voyager-redis-1   redis:7                "docker-entrypoint.s…"   redis     3 days ago   Up 2 minutes (healthy)   0.0.0.0:6379->6379/tcp
 language-voyager-web-1     language-voyager-web   "uvicorn app.main:ap…"   web       2 days ago   Up 2 minutes             0.0.0.0:8000->8000/tcp
 ```
+
+### ArcGIS Location Services Limits
+
+The application uses ArcGIS Location Services with the following free tier limits:
+
+| Service | Description | Monthly Free Limit | Overage Rate |
+|---------|-------------|-------------------|--------------|
+| Basemap Tiles | Vector, map, and static basemap tiles | 2,000,000 | $0.15 per 1,000 tiles |
+| Nearby Search | Filter and obtain data points (lat/long, attributes) | 500 | $8 per 1,000 requests |
+| Place Attributes | Description, contact, social, rating info | 100 | $0.05 per 1,000 places |
+| Address Attributes | Location and delivery information | 100 | $0.10 per 1,000 places |
+| Details Attributes | Description, contact, social, rating info | 100 | $0.13 per 1,000 places |
+| Location Attributes | Location coordinates (drop off, front door, etc.) | 100 | $0.35 per 1,000 places |
+
+### Google Places API Limits
+
+The application uses Google Places API with the following quotas:
+
+| Service | Daily Limit | Per Minute Limit |
+|---------|------------|------------------|
+| Autocomplete Places | 175,000 | 12,000 |
+| Get Photo Media | 175,000 | 600 |
+| Get Place | 125,000 | 600 |
+| Lookup Place Details | Unlimited | 600 |
+| Search Nearby | 75,000 | 600 |
+| Search Text | 75,000 | 600 |
+
+Note: All services have unlimited per-user quotas. The limits above are service-wide quotas.
+
+### OpenRouter API Limits
+
+The application uses OpenRouter API with the following limits:
+
+| Tier | Request Limits |
+|------|----------------|
+| Free Models (:free suffix) | • 20 requests per minute<br>• 200 requests per day |
+| Paid Models | • 1 request per credit per second<br>• Maximum 500 requests per second (higher limits available on request) |
+
+Rate limits are based on credits remaining:
+- 0.5 credits → 1 request/second (minimum)
+- 5 credits → 5 requests/second
+- 10 credits → 10 requests/second
+- 500 credits → 500 requests/second
+- 1000+ credits → Contact OpenRouter for higher limits
+
+Note: The application uses the free model `google/gemma-3-27b-it:free`, so the free tier limits apply. A negative credit balance may result in 402 errors, even for free models.
+
 ### Development API Documentation
 
 When running in development mode, you can access the API documentation at:
