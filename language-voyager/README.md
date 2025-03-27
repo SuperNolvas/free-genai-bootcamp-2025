@@ -87,7 +87,7 @@ Please refer to [technical_details.md](technical_details.md).
       - Offers more generous location resolving credits than ArcGIS
 
 
-3. Build and start the containers:
+3. Build and start the containers (see Container Structure section below for examples of running containers):
    ```bash
    docker compose build
    docker compose up -d
@@ -120,6 +120,18 @@ Please refer to [technical_details.md](technical_details.md).
      Password: testpass123
      ```
    Note: These credentials are temporary and will be removed once user creation is implemented.
+
+### Development API Documentation
+
+When running in development mode (this is the current default set in the .env file), you can access the API documentation and view all the endpoints and schemas at:
+
+1. **SwaggerUI**
+   - URL: `http://localhost:8000/api/docs`
+   - Interactive API documentation and testing
+
+2. **ReDoc**
+   - URL: `http://localhost:8000/api/redoc`
+   - Detailed API schema and reference
 
 ## Container Structure
 
@@ -189,17 +201,6 @@ Rate limits are based on credits remaining:
 
 Note: The application uses the free model `google/gemma-3-27b-it:free`, so the free tier limits apply. A negative credit balance may result in 402 errors, even for free models.
 
-### Development API Documentation
-
-When running in development mode, you can access the API documentation at:
-
-1. **SwaggerUI**
-   - URL: `http://localhost:8000/api/docs`
-   - Interactive API documentation and testing
-
-2. **ReDoc**
-   - URL: `http://localhost:8000/api/redoc`
-   - Detailed API schema and reference
 
 ## Technical Architecture
 
