@@ -270,6 +270,10 @@ The schemas define the JSON data structures used throughout the API in several k
 
 These schemas represent a contract between the API and its clients, ensuring consistency and proper data structure throughout all API interactions.
 
+## SwaggerUI Documentation screen
+
+![SwaggerUI Documentation](/screenshots/Screenshot%202025-03-21%20at%2018-39-09%20Language%20Voyager%20-%20Swagger%20UI.png)
+
 ### Core Data Models
 
 #### Achievement

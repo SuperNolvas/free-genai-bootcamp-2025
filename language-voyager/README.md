@@ -66,7 +66,7 @@ Please refer to [technical_details.md](technical_details.md).
 
    **IMPORTANT!:** The ARCGISARCGIS_API_KEY must be enclosed in quotes, while the other keys do not require quotes.
 
-   API Key Setup Instructions:
+   ### API Key Setup Instructions (see API Quotas/Requests per month section for details on API limits with these free tiers):
 
     ArcGIS API Key
       - Go to [ArcGIS API Key Creation](https://developers.arcgis.com/documentation/security-and-authentication/api-key-authentication/tutorials/create-an-api-key/)
@@ -112,7 +112,7 @@ Please refer to [technical_details.md](technical_details.md).
    npm run build
    ```
 
-6. Access the application:
+6. Access the application (see Application Demo Screens section for expected application flow):
    - Go to `http://localhost:8000`
    - Use the test credentials:
      ```
@@ -152,6 +152,42 @@ language-voyager-db-1      postgres:15            "docker-entrypoint.s…"   db 
 language-voyager-redis-1   redis:7                "docker-entrypoint.s…"   redis     3 days ago   Up 2 minutes (healthy)   0.0.0.0:6379->6379/tcp
 language-voyager-web-1     language-voyager-web   "uvicorn app.main:ap…"   web       2 days ago   Up 2 minutes             0.0.0.0:8000->8000/tcp
 ```
+
+## Application Demo screens
+
+1. Here is the initial login screen using the test credentials provided above
+
+![Login Screen](screenshots/Login_Screen.png)
+
+2. The random locations are bounded within the Tokyo region, so the blue rectangle shown on the zoomed out map example below 
+
+
+![Region Boundary](screenshots/map_boundary.png)
+
+3. Once you login you will see the Map screen and Chat container screen, you will be presented with a random location
+
+![Initial Screen](screenshots/Initial_screen.png)
+
+4. Now you can ask the LLM a question. The LLM is aware of the current location displayed at the top of the chat container, and it can reply to you with context aware responses based on the current location.
+
+![Example first question](screenshots/1st_question.png)
+
+5. Here is a follow up question
+
+![Follow Up Question](screenshots/follow_up_question.png)
+
+6. If you use Japanese in your reply, the LLM should reply back with more examples in Japanese. You can use Hirigana, Kanji, Katakana and Romanji to converse with the LLM and it can respond back with examples using these writing systems and again the responses are location aware. 
+
+
+![Japanese question example](screenshots/location_aware_question.png)
+
+7. To change random location click on the blue Random Location button at the bottom center of the map
+
+![Changing random location](screenshots/moving_to_random_location.png)
+
+8. Lastly there are water features on the map, ocean and rivers. You can for example be located over a body of water and you can ask the LLM a location aware question 
+
+![Water Features](screenshots/water_based_query.png)
 
 ## API Quotas/Requests per month
 
@@ -335,7 +371,7 @@ TOKYO_CENTER = {
 ```
 
 ### LLM Integration Features
-- Location-aware conversation context
+- Location-aware conversation context (see [System Prompt Structure](technical_details.md#system-prompt-structure))
 - Dynamic formality adjustment based on location type
 - Support for both Japanese and English place names
 - Real-time location updates in chat context
