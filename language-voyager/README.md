@@ -26,6 +26,17 @@ Players navigate a detailed ArcGIS map of their target language's country (e.g.,
 3. **Cultural missions** that combine language learning with cultural knowledge
 4. **Progressive difficulty** as players "unlock" new regions
 
+## Technical Documentation
+
+For a comprehensive technical appraisal of the project, including:
+- Detailed system architecture and data flows
+- API schemas and endpoint documentation
+- Database models and relationships
+- Implementation considerations and feasibility analysis
+- Service integration details and limitations
+
+Please refer to [technical_details.md](technical_details.md).
+
 ## Getting Started
 
 ### Prerequisites
@@ -110,7 +121,7 @@ Players navigate a detailed ArcGIS map of their target language's country (e.g.,
      ```
    Note: These credentials are temporary and will be removed once user creation is implemented.
 
-### Container Structure
+## Container Structure
 
 The application uses Docker health checks to ensure services are properly initialized:
 - Database: PostgreSQL database service with health checks
@@ -129,6 +140,8 @@ language-voyager-db-1      postgres:15            "docker-entrypoint.s…"   db 
 language-voyager-redis-1   redis:7                "docker-entrypoint.s…"   redis     3 days ago   Up 2 minutes (healthy)   0.0.0.0:6379->6379/tcp
 language-voyager-web-1     language-voyager-web   "uvicorn app.main:ap…"   web       2 days ago   Up 2 minutes             0.0.0.0:8000->8000/tcp
 ```
+
+## API Quotas/Requests per month
 
 ### ArcGIS Location Services Limits
 
